@@ -52,7 +52,9 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
                 ),
             }],
             'algorithm_types': [
-                metadata_base.PrimitiveAlgorithmType.SEMISUPERVISED_CLASSIFICATION,
+                # FIXME consider adding type in algorithm_types @see
+                # https://gitlab.com/datadrivendiscovery/d3m/blob/devel/d3m/metadata/schemas/v0/definitions.json#L1945
+                metadata_base.PrimitiveAlgorithmType.BINARY_CLASSIFICATION,
             ],
             'primitive_family': metadata_base.PrimitiveFamily.SEMISUPERVISED_CLASSIFICATION,
         },
