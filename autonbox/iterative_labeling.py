@@ -1,5 +1,7 @@
 import os
+import numpy as np
 
+import d3m.metadata
 from d3m import container, utils as d3m_utils
 from d3m.metadata import base as metadata_base, hyperparams
 from d3m.metadata import params
@@ -38,7 +40,7 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
             'version': '0.1.0',
             "name": "Iterative labeling for semi-supervised learning",
             'description': "Blackbox based iterative labeling for semi-supervised classification",
-            'python_path': 'd3m.primitives.semisupervised_classification.bbil.AutonBox',
+            'python_path': 'd3m.primitives.semisupervised_classification.iterative_labeling.AutonBox',
             'source': {
                 'name': autonbox.__author__,
                 'uris': ['https://github.com/autonlab/autonbox'],
@@ -62,38 +64,47 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
 
     def __init__(self, *, hyperparams: IterativeLabelingHyperparams) -> None:
         super().__init__(hyperparams=hyperparams)
-        self._clf = None
+        self._prim_instance = None
         self._is_fitted = False
         self.X = None
-        self.Y = None
+        self.y = None
 
     def __getstate__(self):
         return (
-            self.hyperparams, self._clf, self._is_fitted)
+            self.hyperparams, self._prim_instance, self._is_fitted)
 
     def __setstate__(self, state):
-        self.hyperparams, self._clf, self._is_fitted = None
+        self.hyperparams, self._prim_instance, self._is_fitted = None
 
     def fit(self, *, timeout: float = None, iterations: int = None) -> base.CallResult[None]:
-        primitive = self.hyperparams['blackbox']
-
         X = self.X
         y = self.y
 
-        labeledIx = y[y.notnull().any(axis=1)].index
-        unlabeledIx = y[y.isnull().any(axis=1)].index
+        primitive = self.hyperparams['blackbox']
+        primitive_hyperparams = primitive.metadata.query()['primitive_code']['class_type_arguments']['Hyperparams']
+        custom_hyperparams = {}
+        if isinstance(primitive, d3m.primitive_interfaces.base.PrimitiveBaseMeta):  # is a class
+            self._prim_instance = primitive(
+                hyperparams=primitive_hyperparams(primitive_hyperparams.defaults(), **custom_hyperparams))
+        else:  # is an instance
+            self._prim_instance = primitive
+
+        labeledIx = np.where(y.iloc[:, 0].values != '')[0]
+        unlabeledIx = np.where(y.iloc[:, 0].values == '')[0]
 
         labeledX = X.iloc[labeledIx]
         labeledy = y.iloc[labeledIx]
 
-        self._clf.fit(labeledX, labeledy)
-        predictions = self._clf.predict(X.iloc[unlabeledIx])
+        self._prim_instance.set_training_data(inputs=labeledX, outputs=labeledy)
+        self._prim_instance.fit()
+        predictions = self._prim_instance.produce(inputs=X.iloc[unlabeledIx]).value
 
-        for i in range(len(predictions)):
+        for i, prediction in enumerate(np.squeeze(predictions.values)):
             row = unlabeledIx[i]
-            y.iat[row, 0] = predictions[i]
+            y.iat[row, 0] = prediction
 
-        self._clf.fit(X, y)
+        self._prim_instance.set_training_data(inputs=X, outputs=y)
+        self._prim_instance.fit()
         self._is_fitted = True
 
         return base.CallResult(None)
@@ -116,5 +127,6 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
         self._is_fitted = params['is_fitted']
 
     def produce(self, *, inputs: Input, timeout: float = None, iterations: int = None) -> base.CallResult[Output]:
-        output = self._clf.predict(inputs)
+        output = self._prim_instance.produce(inputs=inputs)
+        output = container.DataFrame(output.value, generate_metadata=True)
         return base.CallResult(output)
