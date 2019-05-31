@@ -82,7 +82,7 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
 
         primitive = self.hyperparams['blackbox']
         primitive_hyperparams = primitive.metadata.query()['primitive_code']['class_type_arguments']['Hyperparams']
-        custom_hyperparams = {}
+        custom_hyperparams = {'n_estimators': 100}
         if isinstance(primitive, d3m.primitive_interfaces.base.PrimitiveBaseMeta):  # is a class
             self._prim_instance = primitive(
                 hyperparams=primitive_hyperparams(primitive_hyperparams.defaults(), **custom_hyperparams))
