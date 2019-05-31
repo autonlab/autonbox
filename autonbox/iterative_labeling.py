@@ -21,11 +21,17 @@ class IterativeLabelingParams(params.Params):
 
 
 class IterativeLabelingHyperparams(hyperparams.Hyperparams):
+    iters = hyperparams.UniformInt(lower=1, upper=100, default=5,
+                                   semantic_types=['https://metadata.datadrivendiscovery.org/types/TuningParameter'],
+                                   description='The number of iterations of labeling')
+    frac = hyperparams.Uniform(lower=0.01, upper=1.0, default=0.2,
+                                 semantic_types=['https://metadata.datadrivendiscovery.org/types/TuningParameter'],
+                                 description='The fraction of unlabeled item to label')
     blackbox = hyperparams.Primitive[SupervisedLearnerPrimitiveBase](
         primitive_families=[PrimitiveFamily.CLASSIFICATION],
         default=SKRandomForestClassifier,
         semantic_types=['https://metadata.datadrivendiscovery.org/types/TuningParameter'],
-        description='Black box model for the classification.')
+        description='Black box model for the classification')
 
 
 class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, IterativeLabelingParams,
@@ -68,6 +74,8 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
         self._is_fitted = False
         self.X = None
         self.y = None
+        self._iters = hyperparams['iters']
+        self._frac = hyperparams['frac']
 
     def __getstate__(self):
         return (
@@ -89,21 +97,36 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
         else:  # is an instance
             self._prim_instance = primitive
 
-        labeledIx = np.where(y.iloc[:, 0].values != '')[0]
-        unlabeledIx = np.where(y.iloc[:, 0].values == '')[0]
+        for labelIteration in range(self._iters):
+            labeledIx = np.where(y.iloc[:, 0].values != '')[0]
+            unlabeledIx = np.where(y.iloc[:, 0].values == '')[0]
 
+            if (labelIteration == 0):
+                num_instances_to_label = int(self._frac * len(unlabeledIx) + 0.5)
+
+            labeledX = X.iloc[labeledIx]
+            labeledy = y.iloc[labeledIx]
+
+            self._prim_instance.set_training_data(inputs=labeledX, outputs=labeledy)
+            self._prim_instance.fit()
+            probas = self._prim_instance._clf.predict_proba(X.iloc[unlabeledIx])
+
+            entropies = np.sum(np.log2(probas.clip(0.0000001, 1.0)) * probas, axis=1)
+            # join the entropies and the unlabeled indecies into a single recarray and sort it by entropy
+            entIdx = np.rec.fromarrays((entropies, unlabeledIx))
+            entIdx.sort(axis=0)
+
+            labelableIndices = entIdx['f1'][-num_instances_to_label:].reshape((-1,))
+
+            predictions = self._prim_instance.produce(inputs=X.iloc[labelableIndices]).value
+            ydf = y.iloc[labelableIndices, 0]
+            ydf.loc[:] = predictions.iloc[:, 0]
+
+        labeledIx = np.where(y.iloc[:, 0].values != '')[0]
         labeledX = X.iloc[labeledIx]
         labeledy = y.iloc[labeledIx]
 
         self._prim_instance.set_training_data(inputs=labeledX, outputs=labeledy)
-        self._prim_instance.fit()
-        predictions = self._prim_instance.produce(inputs=X.iloc[unlabeledIx]).value
-
-        for i, prediction in enumerate(np.squeeze(predictions.values)):
-            row = unlabeledIx[i]
-            y.iat[row, 0] = prediction
-
-        self._prim_instance.set_training_data(inputs=X, outputs=y)
         self._prim_instance.fit()
         self._is_fitted = True
 
