@@ -39,7 +39,7 @@ setup(
     author_email=read_package_variable('__author_email__'),
     packages=find_packages(exclude=['contrib', 'docs', 'tests*']),
     install_requires=[
-        'd3m',
+        'd3m==2019.5.8',
         'numpy',
     ],
     entry_points=read_entry_points(),
