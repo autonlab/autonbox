@@ -41,6 +41,7 @@ setup(
     install_requires=[
         'd3m==2019.5.8',
         'numpy',
+        'torch>=1.0.1.post2'  # this should match e.g. https://gitlab.com/datadrivendiscovery/common-primitives/blob/8ec0b2c551c3b3d64348af352d916b80d15d41f1/setup.py#L53
     ],
     entry_points=read_entry_points(),
     url='https://github.com/autonlab/autonbox',
