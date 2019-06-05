@@ -68,7 +68,7 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
             }, {
                 'type': metadata_base.PrimitiveInstallationType.FILE,
                 'key': autonbox.__key_static_file_resnext__,
-                'file_uri': 'https://doc-0k-74-docs.googleusercontent.com/docs/securesc/ha0ro937gcuc7l7deffksulhg5h7mbp1/qg2eg2c7l2nt9iglpq74jba810p0br5n/1559656800000/09020394064798262542/*/1cULocPe5YvPGWU4tV5t6fC9rJdGLfkWe?e=download',
+                'file_uri': 'http://public.datadrivendiscovery.org/resnext-101-kinetics.pth',
                 'file_digest': 'f82e4e519723fc7b2ff3761ea35600bdaf796fb7a4e62ee4c5591da7ffe48326'
             }],
             'algorithm_types': [
