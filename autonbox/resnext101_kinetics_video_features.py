@@ -38,7 +38,7 @@ class ResNext101KineticsParams(object):
     resnext_cardinality = 32
     sample_size = 112
     sample_duration = 16  # number of frames in one clip
-    no_cuda = False
+    no_cuda = True
     mean = [114.7748, 107.7354, 99.4750]
     batch_size = 32
     n_threads = 4
@@ -82,6 +82,15 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
         super().__init__(hyperparams=hyperparams, volumes=volumes)
 
         self._config = ResNext101KineticsParams
+
+        # Use GPU if available
+        if torch.cuda.is_available():
+            _logger.info("Use GPU.")
+            self._config.no_cuda = False
+        else:
+            _logger.info("Use CPU.")
+            self._config.no_cuda = True
+
         self._model = generate_model(self._config)
         self._down_rate = 1
         model_data = self._load_model()
