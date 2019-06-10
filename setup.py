@@ -39,7 +39,7 @@ setup(
     author_email=read_package_variable('__author_email__'),
     packages=find_packages(exclude=['contrib', 'docs', 'tests*']),
     install_requires=[
-        'd3m==2019.6.7',
+        'd3m',
         'numpy',
         'torch>=1.0.1.post2'  # this should match e.g. https://gitlab.com/datadrivendiscovery/common-primitives/blob/8ec0b2c551c3b3d64348af352d916b80d15d41f1/setup.py#L53
     ],
