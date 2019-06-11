@@ -37,7 +37,7 @@ setup(
     description='Auton Lab TA1 primitives',
     author=read_package_variable('__author__'),
     author_email=read_package_variable('__author_email__'),
-    packages=find_packages(exclude=['contrib', 'docs', 'tests*']),
+    packages=find_packages(exclude=['docs', 'tests*']),
     install_requires=[
         'd3m',
         'numpy',
