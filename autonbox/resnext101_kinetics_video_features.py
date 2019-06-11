@@ -1,4 +1,3 @@
-import logging
 import os
 
 import autonbox
@@ -18,8 +17,6 @@ from torch.autograd import Variable
 
 Inputs = container.DataFrame
 Outputs = container.DataFrame
-
-_logger = logging.getLogger(__name__)
 
 
 class Hyperparams(hyperparams.Hyperparams):
@@ -85,10 +82,10 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
 
         # Use GPU if available
         if torch.cuda.is_available():
-            _logger.info("Use GPU.")
+            self.logger.info("Use GPU.")
             self._config.no_cuda = False
         else:
-            _logger.info("Use CPU.")
+            self.logger.info("Use CPU.")
             self._config.no_cuda = True
 
         self._model = generate_model(self._config)
@@ -100,7 +97,7 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
             state_dict = model_data['state_dict']
         self._model.load_state_dict(state_dict)
         self._model.eval()
-        _logger.info(self._model)
+        self.logger.info(self._model)
 
     def produce(self, *, inputs: Inputs, timeout: float = None, iterations: int = None) -> CallResult[Outputs]:
         # inputs is DataFrame
@@ -156,7 +153,7 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
         key_filename = autonbox.__key_static_file_resnext__
         if key_filename in self.volumes:
             self._weight_file_path = self.volumes[key_filename]
-            _logger.info("Weights file found in static volumes")
+            self.logger.info("Weights file found in static volumes")
             if torch.cuda.is_available():  # GPU
                 model_data = torch.load(self._weight_file_path)
             else:  # CPU only
