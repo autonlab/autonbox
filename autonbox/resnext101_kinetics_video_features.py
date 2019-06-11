@@ -157,7 +157,10 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
         if key_filename in self.volumes:
             self._weight_file_path = self.volumes[key_filename]
             _logger.info("Weights file found in static volumes")
-            model_data = torch.load(self._weight_file_path)
+            if torch.cuda.is_available():  # GPU
+                model_data = torch.load(self._weight_file_path)
+            else:  # CPU only
+                model_data = torch.load(self._weight_file_path, map_location='cpu')
         else:
             raise ValueError("Can't get weights file from the volume by key: {}".format(key_filename))
 
