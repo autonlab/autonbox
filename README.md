@@ -8,7 +8,7 @@ This repository contains additional Auton Lab TA1 primitives for the D3M program
 ## Installation
 To install primitives, run:
 ```bash
-pip install git+https://github.com/autonlab/autonbox
+pip install -U -e git+https://github.com/autonlab/autonbox.git#egg=autonbox
 ```
 
 `Video featurizer` requires a static file, pre-trained model weights.
