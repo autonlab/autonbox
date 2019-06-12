@@ -80,7 +80,7 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
             self.hyperparams, self._prim_instance, self._is_fitted)
 
     def __setstate__(self, state):
-        self.hyperparams, self._prim_instance, self._is_fitted = None
+        self.hyperparams, self._prim_instance, self._is_fitted = state
 
     def fit(self, *, timeout: float = None, iterations: int = None) -> base.CallResult[None]:
         X = self.X
