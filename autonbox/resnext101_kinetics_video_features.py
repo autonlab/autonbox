@@ -66,7 +66,7 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
                 'type': metadata_base.PrimitiveInstallationType.FILE,
                 'key': autonbox.__key_static_file_resnext__,
                 'file_uri': 'http://public.datadrivendiscovery.org/resnext-101-kinetics.pth',
-                'file_digest': 'f82e4e519723fc7b2ff3761ea35600bdaf796fb7a4e62ee4c5591da7ffe48326'
+                'file_digest': autonbox.__digest_static_file_resnext__
             }],
             'algorithm_types': [
                 metadata_base.PrimitiveAlgorithmType.CONVOLUTIONAL_NEURAL_NETWORK,
@@ -151,14 +151,22 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
         :return:
         """
         key_filename = autonbox.__key_static_file_resnext__
+        static_dir = os.getenv('D3MSTATICDIR', '/static')
         if key_filename in self.volumes:
-            self._weight_file_path = self.volumes[key_filename]
-            self.logger.info("Weights file found in static volumes")
-            if torch.cuda.is_available():  # GPU
-                model_data = torch.load(self._weight_file_path)
-            else:  # CPU only
-                model_data = torch.load(self._weight_file_path, map_location='cpu')
+            _weight_file_path = self.volumes[key_filename]
+            self.logger.info("Weights file path found in static volumes")
         else:
-            raise ValueError("Can't get weights file from the volume by key: {}".format(key_filename))
+            self.logger.info("Trying to locate weights file in the static folder {}".format(static_dir))
+            _weight_file_path = os.path.join(static_dir, autonbox.__digest_static_file_resnext__)
+
+        if os.path.isfile(_weight_file_path):
+            if torch.cuda.is_available():  # GPU
+                model_data = torch.load(_weight_file_path)
+            else:  # CPU only
+                model_data = torch.load(_weight_file_path, map_location='cpu')
+            self.logger.info("Loaded weights file")
+        else:
+            raise ValueError("Can't get weights file from the volume by key: {} or in the static folder: {}".format(
+                key_filename, static_dir))
 
         return model_data
