@@ -1,6 +1,7 @@
 import os
 
 import autonbox
+import cv2
 import numpy as np
 import torch
 import typing
@@ -66,7 +67,7 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
                 'type': metadata_base.PrimitiveInstallationType.FILE,
                 'key': autonbox.__key_static_file_resnext__,
                 'file_uri': 'http://public.datadrivendiscovery.org/resnext-101-kinetics.pth',
-                'file_digest': 'f82e4e519723fc7b2ff3761ea35600bdaf796fb7a4e62ee4c5591da7ffe48326'
+                'file_digest': autonbox.__digest_static_file_resnext__
             }],
             'algorithm_types': [
                 metadata_base.PrimitiveAlgorithmType.CONVOLUTIONAL_NEURAL_NETWORK,
@@ -100,12 +101,24 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
         self.logger.info(self._model)
 
     def produce(self, *, inputs: Inputs, timeout: float = None, iterations: int = None) -> CallResult[Outputs]:
-        # inputs is DataFrame
-        # inputs.iloc[0,0] is a ndarray of size (408, 240, 320, 3)
-
+        """
+        :param inputs: assume the first column is the filename
+        :param timeout:
+        :param iterations:
+        :return:
+        """
         features = []
-        for video in inputs.iloc[:, 0]:
-            features.append(self._generate_vid_feature(video))
+        # TODO consider a more robust means to 1) get location_base_uris and remove file://
+        media_root_dir = inputs.metadata.query((0, 0))['location_base_uris'][0][len('file://'):]  # remove file://
+        for filename in inputs.iloc[:, 0]:
+            file_path = os.path.join(media_root_dir, filename)
+            if os.path.isfile(file_path):
+                video = self._read_fileuri(file_path)  # video is a ndarray of F x H x W x C, e.g. (408, 240, 320, 3)
+                feature = self._generate_vid_feature(video)
+            else:
+                self.logger.warning("No such file {}. Feature vector will be set to all zeros.".format(file_path))
+                feature = np.zeros(2048)
+            features.append(feature)
 
         results = container.DataFrame(features, generate_metadata=True)
 
@@ -130,18 +143,14 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
         data_loader = torch.utils.data.DataLoader(data, batch_size=self._config.batch_size,
                                                   shuffle=False, num_workers=self._config.n_threads, pin_memory=True)
         video_outputs = []
-        video_segments = []
         with torch.no_grad():
-            for i, (inputs, segments) in enumerate(data_loader):
+            for i, inputs in enumerate(data_loader):
                 inputs = Variable(inputs)
                 # input is of shape n x 3 x sample_duration x 112 x 112
                 outputs = self._model(inputs)
                 # output is of format n(batch size) x d(dimension of feature)
                 video_outputs.append(outputs.cpu().data)
-                video_segments.append(segments)
-                # segments is of shape batch_size x 2
         video_outputs = np.concatenate(video_outputs, axis=0)
-        # video_segments = np.concatenate(video_segments,axis=0)
         mean_feature = np.mean(video_outputs, axis=0)  # shape of (d, )
         return mean_feature
 
@@ -151,14 +160,51 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
         :return:
         """
         key_filename = autonbox.__key_static_file_resnext__
+        static_dir = os.getenv('D3MSTATICDIR', '/static')
         if key_filename in self.volumes:
-            self._weight_file_path = self.volumes[key_filename]
-            self.logger.info("Weights file found in static volumes")
-            if torch.cuda.is_available():  # GPU
-                model_data = torch.load(self._weight_file_path)
-            else:  # CPU only
-                model_data = torch.load(self._weight_file_path, map_location='cpu')
+            _weight_file_path = self.volumes[key_filename]
+            self.logger.info("Weights file path found in static volumes")
         else:
-            raise ValueError("Can't get weights file from the volume by key: {}".format(key_filename))
+            self.logger.info("Trying to locate weights file in the static folder {}".format(static_dir))
+            _weight_file_path = os.path.join(static_dir, autonbox.__digest_static_file_resnext__)
+
+        if os.path.isfile(_weight_file_path):
+            if torch.cuda.is_available():  # GPU
+                model_data = torch.load(_weight_file_path)
+            else:  # CPU only
+                model_data = torch.load(_weight_file_path, map_location='cpu')
+            self.logger.info("Loaded weights file")
+        else:
+            raise ValueError("Can't get weights file from the volume by key: {} or in the static folder: {}".format(
+                key_filename, static_dir))
 
         return model_data
+
+    def _read_fileuri(self, fileuri: str) -> container.ndarray:
+        """
+        @see https://gitlab.com/datadrivendiscovery/common-primitives/blob/master/common_primitives/video_reader.py#L65
+        :param fileuri:
+        :return:
+        """
+        capture = cv2.VideoCapture(fileuri)
+        frames = []
+
+        try:
+            while capture.isOpened():
+                ret, frame = capture.read()
+                if not ret:
+                    break
+                else:
+                    assert frame.dtype == np.uint8, frame.dtype
+
+                    if frame.ndim == 2:
+                        # Make sure there are always three dimensions.
+                        frame = frame.reshape(list(frame.shape) + [1])
+
+                    assert frame.ndim == 3, frame.ndim
+
+                    frames.append(frame)
+        finally:
+            capture.release()
+
+        return container.ndarray(np.array(frames), generate_metadata=False)
