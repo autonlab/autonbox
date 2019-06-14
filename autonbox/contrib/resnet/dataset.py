@@ -1,10 +1,12 @@
+import copy
+import json
+import os
+
+import functools
+import numpy as np
 import torch
 import torch.utils.data as data
 from PIL import Image
-import os
-import numpy as np
-import functools
-import copy
 
 
 def pil_loader(path):
@@ -25,7 +27,6 @@ def accimage_loader(path):
 def get_default_image_loader():
     from torchvision import get_image_backend
     if get_image_backend() == 'accimage':
-        import accimage
         return accimage_loader
     else:
         return pil_loader
@@ -112,11 +113,15 @@ def make_dataset_from_matrix(vid_matrix, sample_duration, down_rate):
         'n_frames': n_frames,
     }
     step = sample_duration * down_rate
-    for i in range(1, (n_frames - sample_duration + 1), step):
-        sample_i = copy.deepcopy(sample)
-        sample_i['frame_indices'] = list(range(i, i + sample_duration))
-        sample_i['segment'] = torch.IntTensor([i, i + sample_duration - 1])
-        dataset.append(sample_i)
+    # for i in range(1, n_frames - sample_duration + 1, step):
+    #     sample_i = copy.deepcopy(sample)
+    #     sample_i['frame_indices'] = list(range(i, i + sample_duration))
+    #     sample_i['segment'] = torch.IntTensor([i, i + sample_duration - 1])
+    #     dataset.append(sample_i)
+    for j in range(1, n_frames, step):
+        sample_j = copy.deepcopy(sample)
+        sample_j['frame_indices'] = list(range(j, min(n_frames + 1, j + sample_duration)))
+        dataset.append(sample_j)
 
     return dataset
 
@@ -154,16 +159,16 @@ class Video(data.Dataset):
             clip = self.loader(vid_content, frame_indices)
         elif isinstance(vid_content,np.ndarray):
             # clip = vid_content[frame_indices, :, :, :]
-            clip = [Image.fromarray(vid_content[j,:,:,:]) for j in frame_indices]
+            clip = [Image.fromarray(vid_content[j-1,:,:,:]) for j in frame_indices]
         # a list(len=16) of PIL images!
         # can also take numpy.ndarray (H x W x C) instead
         if self.spatial_transform is not None:
             clip = [self.spatial_transform(img) for img in clip]
         clip = torch.stack(clip, 0).permute(1, 0, 2, 3)
         # is originally 3x16x112x112
-        target = self.data[index]['segment']
+        # target = self.data[index]['n_frames']
 
-        return clip, target
+        return clip # , target
 
     def __len__(self):
         return len(self.data)

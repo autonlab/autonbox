@@ -130,18 +130,14 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
         data_loader = torch.utils.data.DataLoader(data, batch_size=self._config.batch_size,
                                                   shuffle=False, num_workers=self._config.n_threads, pin_memory=True)
         video_outputs = []
-        video_segments = []
         with torch.no_grad():
-            for i, (inputs, segments) in enumerate(data_loader):
+            for i, inputs in enumerate(data_loader):
                 inputs = Variable(inputs)
                 # input is of shape n x 3 x sample_duration x 112 x 112
                 outputs = self._model(inputs)
                 # output is of format n(batch size) x d(dimension of feature)
                 video_outputs.append(outputs.cpu().data)
-                video_segments.append(segments)
-                # segments is of shape batch_size x 2
         video_outputs = np.concatenate(video_outputs, axis=0)
-        # video_segments = np.concatenate(video_segments,axis=0)
         mean_feature = np.mean(video_outputs, axis=0)  # shape of (d, )
         return mean_feature
 
