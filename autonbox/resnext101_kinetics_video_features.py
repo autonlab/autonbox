@@ -1,6 +1,7 @@
 import os
 
 import autonbox
+import cv2
 import numpy as np
 import torch
 import typing
@@ -100,12 +101,24 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
         self.logger.info(self._model)
 
     def produce(self, *, inputs: Inputs, timeout: float = None, iterations: int = None) -> CallResult[Outputs]:
-        # inputs is DataFrame
-        # inputs.iloc[0,0] is a ndarray of size (408, 240, 320, 3)
-
+        """
+        :param inputs: assume the first column is the filename
+        :param timeout:
+        :param iterations:
+        :return:
+        """
         features = []
-        for video in inputs.iloc[:, 0]:
-            features.append(self._generate_vid_feature(video))
+        # TODO consider a more robust means to 1) get location_base_uris and remove file://
+        media_root_dir = inputs.metadata.query((0, 0))['location_base_uris'][0][len('file://'):]  # remove file://
+        for filename in inputs.iloc[:, 0]:
+            file_path = os.path.join(media_root_dir, filename)
+            if os.path.isfile(file_path):
+                video = self._read_fileuri(file_path)  # video is a ndarray of F x H x W x C, e.g. (408, 240, 320, 3)
+                feature = self._generate_vid_feature(video)
+            else:
+                self.logger.warning("No such file {}. Feature vector will be set to all zeros.".format(file_path))
+                feature = np.zeros(2048)
+            features.append(feature)
 
         results = container.DataFrame(features, generate_metadata=True)
 
@@ -166,3 +179,32 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
                 key_filename, static_dir))
 
         return model_data
+
+    def _read_fileuri(self, fileuri: str) -> container.ndarray:
+        """
+        @see https://gitlab.com/datadrivendiscovery/common-primitives/blob/master/common_primitives/video_reader.py#L65
+        :param fileuri:
+        :return:
+        """
+        capture = cv2.VideoCapture(fileuri)
+        frames = []
+
+        try:
+            while capture.isOpened():
+                ret, frame = capture.read()
+                if not ret:
+                    break
+                else:
+                    assert frame.dtype == np.uint8, frame.dtype
+
+                    if frame.ndim == 2:
+                        # Make sure there are always three dimensions.
+                        frame = frame.reshape(list(frame.shape) + [1])
+
+                    assert frame.ndim == 3, frame.ndim
+
+                    frames.append(frame)
+        finally:
+            capture.release()
+
+        return container.ndarray(np.array(frames), generate_metadata=False)
