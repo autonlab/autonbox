@@ -1,0 +1,30 @@
+Setup a d3m environment that can perform basic tests on the iterative labeling primitive:
+
+conda create --name d3m python=3.6
+source activate d3m
+conda install libcurl
+pip install d3m   # may choose earlier versions if desired
+mkdir xxx/d3m
+cd xxx/d3m
+git clone --recursive https://gitlab.com/datadrivendiscovery/common-primitives.git  # again may choose versions
+
+cd common-primitives
+pip install -e .
+cd ../..
+
+pip install -e git+https://gitlab.com/datadrivendiscovery/sklearn-wrap.git@dist#egg=sklearn_wrap # optional version
+
+
+git clone git@github.com:autonlab/autonbox.git #optional version
+cd autonbox/
+pip install -e .
+cd ..
+
+
+
+
+# test
+
+git clone git@gitlab.datadrivendiscovery.org:cmu/ta1-submissions/IterativeLabeling.git
+edit runtime.sh to setup full path to seed_datasets_current 
+call runtime.sh to evaluate a pipline
