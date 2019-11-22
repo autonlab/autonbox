@@ -43,7 +43,7 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
     metadata = metadata_base.PrimitiveMetadata(
         {
             'id': '6bb5824f-cf16-4615-8643-8c1758bd6751',
-            'version': '0.2.0',
+            'version': '0.2.1',
             "name": "Iterative labeling for semi-supervised learning",
             'description': "Blackbox based iterative labeling for semi-supervised classification",
             'python_path': 'd3m.primitives.semisupervised_classification.iterative_labeling.AutonBox',
