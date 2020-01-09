@@ -40,7 +40,7 @@ setup(
     packages=find_packages(exclude=['docs', 'tests*']),
     install_requires=[
         'd3m',
-        'Pillow',
+        'Pillow==6.2.1',
         'numpy',
         'opencv-python-headless',
         'torch>=1.3.1',
