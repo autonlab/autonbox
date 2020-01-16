@@ -49,7 +49,7 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
     metadata = metadata_base.PrimitiveMetadata(
         {
             'id': '15935e70-0605-4ded-87cf-2933ca35d4dc',
-            'version': '0.1.0',
+            'version': '0.2.0',
             "name": "Video Feature Extraction for Action Classification With 3D ResNet",
             'description': "Video Feature Extraction for Action Classification With 3D ResNet",
             'python_path': 'd3m.primitives.feature_extraction.resnext101_kinetics_video_features.VideoFeaturizer',

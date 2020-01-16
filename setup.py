@@ -40,11 +40,12 @@ setup(
     packages=find_packages(exclude=['docs', 'tests*']),
     install_requires=[
         'd3m',
-        'Pillow',
+        'Pillow==6.2.1',
         'numpy',
         'pandas',
         'opencv-python-headless',
-        'torch>=1.0.1.post2'  # this should match e.g. https://gitlab.com/datadrivendiscovery/common-primitives/blob/8ec0b2c551c3b3d64348af352d916b80d15d41f1/setup.py#L53
+        'torch>=1.3.1',
+        'torchvision'
     ],
     entry_points=read_entry_points(),
     url='https://github.com/autonlab/autonbox',

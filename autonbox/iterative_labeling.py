@@ -43,7 +43,7 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
     metadata = metadata_base.PrimitiveMetadata(
         {
             'id': '6bb5824f-cf16-4615-8643-8c1758bd6751',
-            'version': '0.1.0',
+            'version': '0.2.1',
             "name": "Iterative labeling for semi-supervised learning",
             'description': "Blackbox based iterative labeling for semi-supervised classification",
             'python_path': 'd3m.primitives.semisupervised_classification.iterative_labeling.AutonBox',
@@ -86,24 +86,6 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
         X = self.X
         y = self.y
 
-        # calculate the labeling fractions
-        # If we wish to label 20% each iteration we will want to label
-        # 20%, 25%, 33.3%, 50% and 100% of the remaining unlabeled data each iteration.
-        # We are doing things this way because when entropies are tied we wish to label everything with the tied value in that iteration
-        # so we may label more than the appropriate fraction that iteration and this will allow us to adjust the numbers to add in
-        # subsequent iterations in a reasonable manner.
-        fracList = []
-        remaining = 1.0
-        for i in range(self._iters):
-            if self._frac >= remaining:
-                curFrac = 1.0
-            else:
-                curFrac = self._frac / remaining
-            remaining -= self._frac
-            fracList.append(curFrac)
-            if curFrac == 1.0:
-                break
-
         primitive = self.hyperparams['blackbox']
         primitive_hyperparams = primitive.metadata.query()['primitive_code']['class_type_arguments']['Hyperparams']
         custom_hyperparams = {'n_estimators': 100}
@@ -113,36 +95,30 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
         else:  # is an instance
             self._prim_instance = primitive
 
-        for labelingFrac in fracList:
+        for labelIteration in range(self._iters):
             labeledIx = np.where(y.iloc[:, 0].values != '')[0]
             unlabeledIx = np.where(y.iloc[:, 0].values == '')[0]
-            num_instances_to_label = int(labelingFrac * len(unlabeledIx) + 0.5)
+
+            if (labelIteration == 0):
+                num_instances_to_label = int(self._frac * len(unlabeledIx) + 0.5)
 
             labeledX = X.iloc[labeledIx]
             labeledy = y.iloc[labeledIx]
 
             self._prim_instance.set_training_data(inputs=labeledX, outputs=labeledy)
             self._prim_instance.fit()
-
             probas = self._prim_instance._clf.predict_proba(X.iloc[unlabeledIx])
 
-            negEntropies = np.sum(np.log2(probas.clip(0.0000001, 1.0)) * probas, axis=1)
-            # join the entropies and the unlabeled indices into a single recarray and sort it by entropy
-            entIdx = np.rec.fromarrays((negEntropies, unlabeledIx))
+            entropies = np.sum(np.log2(probas.clip(0.0000001, 1.0)) * probas, axis=1)
+            # join the entropies and the unlabeled indecies into a single recarray and sort it by entropy
+            entIdx = np.rec.fromarrays((entropies, unlabeledIx))
             entIdx.sort(axis=0)
-
-            curEntropy = entIdx[-num_instances_to_label][0]
-            while True:
-                if num_instances_to_label >= len(entIdx):
-                    break
-                if entIdx[-(num_instances_to_label + 1)][0] != curEntropy:
-                    break
-                num_instances_to_label += 1
 
             labelableIndices = entIdx['f1'][-num_instances_to_label:].reshape((-1,))
 
             predictions = self._prim_instance.produce(inputs=X.iloc[labelableIndices]).value
-            y.iloc[labelableIndices, 0] = predictions.iloc[:,0].values
+            ydf = y.iloc[labelableIndices, 0]
+            ydf.loc[:] = predictions.iloc[:, 0]
 
         labeledIx = np.where(y.iloc[:, 0].values != '')[0]
         labeledX = X.iloc[labeledIx]
