@@ -8,7 +8,6 @@ from d3m import utils as d3m_utils
 from d3m.metadata import base as metadata_base, hyperparams
 from d3m.primitive_interfaces.base import CallResult
 from d3m.primitive_interfaces.transformer import TransformerPrimitiveBase
-from d3m.primitives.data_preprocessing.horizontal_concat import DSBOX
 
 import autonbox
 
@@ -24,7 +23,7 @@ class MergePartialPredictionsPrimitive(TransformerPrimitiveBase[Inputs, Outputs,
 
     metadata = metadata_base.PrimitiveMetadata({
         'id': '1cc95f70-0716-11ea-9762-3dd2bb86dde8',
-        'version': '0.1',
+        'version': '0.1.0',
         'name': "Merge predictions of multiple models",
         'python_path': 'd3m.primitives.data_transformation.merge_partial_predictions.AutonBox',
         'source': {
@@ -46,9 +45,11 @@ class MergePartialPredictionsPrimitive(TransformerPrimitiveBase[Inputs, Outputs,
     })
 
     def produce(self, *, inputs: Inputs, timeout: float = None, iterations: int = None) -> CallResult[Outputs]:
-        # Merge inputs
+        # Merge inputs       
         output = pd.concat(inputs, axis = 1)
         output.metadata = inputs[-1].metadata
+        
+        print(output.isna().sum(axis = 1).tolist())
         
         # Propagate best non nan score
         output = output.T.fillna(method = 'bfill').T.iloc[:, :1]

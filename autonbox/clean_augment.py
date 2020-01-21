@@ -38,7 +38,7 @@ class CleanAugmentationPrimitive(TransformerPrimitiveBase[Inputs, Outputs, Hyper
 
     metadata = metadata_base.PrimitiveMetadata({
         'id': 'fe0f1ac8-1d39-463a-b344-7bd498a31b92',
-        'version': '0.1',
+        'version': '0.1.0',
         'name': "Clean dataset of unaugmented rows",
         'python_path': 'd3m.primitives.data_augmentation.clean_augmentation.AutonBox',
         'source': {
