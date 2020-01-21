@@ -49,8 +49,6 @@ class MergePartialPredictionsPrimitive(TransformerPrimitiveBase[Inputs, Outputs,
         output = pd.concat(inputs, axis = 1)
         output.metadata = inputs[-1].metadata
         
-        print(output.isna().sum(axis = 1).tolist())
-        
         # Propagate best non nan score
         output = output.T.fillna(method = 'bfill').T.iloc[:, :1]
         
