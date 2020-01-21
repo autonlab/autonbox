@@ -45,11 +45,20 @@ class MergePartialPredictionsPrimitive(TransformerPrimitiveBase[Inputs, Outputs,
     })
 
     def produce(self, *, inputs: Inputs, timeout: float = None, iterations: int = None) -> CallResult[Outputs]:
-        # Merge inputs       
-        output = pd.concat(inputs, axis = 1)
-        output.metadata = inputs[-1].metadata
+        # Force index to be d3mIndex for concatenation
+        inputs_reindex = []
+        for i in inputs:
+            i_copy = i.copy()
+            i_copy.index = i_copy.d3mIndex
+            i_copy = i_copy.drop(columns="d3mIndex")
+            inputs_reindex.append(i_copy)
         
+        # Merge inputs       
+        output = pd.concat(inputs_reindex, axis = 1)
+        output.metadata = inputs[-1].metadata
+    
         # Propagate best non nan score
         output = output.T.fillna(method = 'bfill').T.iloc[:, :1]
-        
+        output = output.reset_index()
+
         return CallResult(output)
