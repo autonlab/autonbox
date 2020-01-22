@@ -42,6 +42,7 @@ setup(
         'd3m',
         'Pillow==6.2.1',
         'numpy',
+        'pandas',
         'opencv-python-headless',
         'torch>=1.3.1',
         'torchvision'
