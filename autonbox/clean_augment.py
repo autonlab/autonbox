@@ -22,7 +22,7 @@ class Hyperparams(hyperparams.Hyperparams):
     percentage_missing = hyperparams.Uniform(
         lower=0.0, 
         upper=1.0, 
-        default=0.3,
+        default=0.5,
         semantic_types=['https://metadata.datadrivendiscovery.org/types/TuningParameter'],
         description='Percentage of missing data allowed (above this percentage and the line is deleted)'
     )
@@ -40,7 +40,7 @@ class CleanAugmentationPrimitive(TransformerPrimitiveBase[Inputs, Outputs, Hyper
         'id': 'fe0f1ac8-1d39-463a-b344-7bd498a31b92',
         'version': '0.1.0',
         'name': "Clean dataset of unaugmented rows",
-        'python_path': 'd3m.primitives.data_augmentation.clean_augmentation.AutonBox',
+        'python_path': 'd3m.primitives.data_cleaning.clean_augmentation.AutonBox',
         'source': {
             'name': "Vincent Jeanselme",
             'uris': ['https://github.com/autonlab/autonbox'],
@@ -54,9 +54,10 @@ class CleanAugmentationPrimitive(TransformerPrimitiveBase[Inputs, Outputs, Hyper
             ),
         }],
         'algorithm_types': [
-            metadata_base.PrimitiveAlgorithmType.DATA_RETRIEVAL, #TODO: Choose
+            #metadata_base.PrimitiveAlgorithmType.ROW_SELECTION
+            metadata_base.PrimitiveAlgorithmType.DATA_RETRIEVAL, #TODO: Delete when new algo released
         ],
-        'primitive_family': metadata_base.PrimitiveFamily.DATA_TRANSFORMATION
+        'primitive_family': metadata_base.PrimitiveFamily.DATA_CLEANING
     })
 
     def produce(self, *, inputs: Inputs, timeout: float = None, iterations: int = None) -> CallResult[Outputs]:
