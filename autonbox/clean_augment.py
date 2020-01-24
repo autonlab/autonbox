@@ -42,7 +42,7 @@ class CleanAugmentationPrimitive(TransformerPrimitiveBase[Inputs, Outputs, Hyper
         'name': "Clean dataset of unaugmented rows",
         'python_path': 'd3m.primitives.data_cleaning.clean_augmentation.AutonBox',
         'source': {
-            'name': "Vincent Jeanselme",
+            'name': autonbox.__author__,
             'uris': ['https://github.com/autonlab/autonbox'],
             'contact': 'mailto:vjeansel@andrew.cmu.edu'
         },

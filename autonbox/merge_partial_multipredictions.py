@@ -27,7 +27,7 @@ class MergePartialPredictionsPrimitive(TransformerPrimitiveBase[Inputs, Outputs,
         'name': "Merge predictions of multiple models",
         'python_path': 'd3m.primitives.data_transformation.merge_partial_predictions.AutonBox',
         'source': {
-            'name': "Vincent Jeanselme",
+            'name': autonbox.__author__,
             'uris': ['https://github.com/autonlab/autonbox'],
             'contact': 'mailto:vjeansel@andrew.cmu.edu'
         },
