@@ -96,8 +96,9 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
             self._prim_instance = primitive
 
         for labelIteration in range(self._iters):
-            labeledIx = np.where(y.iloc[:, 0].values != '')[0]
-            unlabeledIx = np.where(y.iloc[:, 0].values == '')[0]
+            labeledSelector = y.iloc[:, 0].notnull() & (y.iloc[:, 0].apply(lambda x: x != ''))
+            labeledIx = np.where(labeledSelector)[0]
+            unlabeledIx = np.where(~labeledSelector)[0]
 
             if (labelIteration == 0):
                 num_instances_to_label = int(self._frac * len(unlabeledIx) + 0.5)
@@ -120,7 +121,8 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
             ydf = y.iloc[labelableIndices, 0]
             ydf.loc[:] = predictions.iloc[:, 0]
 
-        labeledIx = np.where(y.iloc[:, 0].values != '')[0]
+        labeledSelector = y.iloc[:, 0].notnull() & (y.iloc[:, 0].apply(lambda x: x != ''))
+        labeledIx = np.where(labeledSelector)[0]
         labeledX = X.iloc[labeledIx]
         labeledy = y.iloc[labeledIx]
 
