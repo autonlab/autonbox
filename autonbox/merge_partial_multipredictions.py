@@ -54,7 +54,7 @@ class MergePartialPredictionsPrimitive(TransformerPrimitiveBase[Inputs, Outputs,
             inputs_reindex.append(i_copy)
         
         # Merge inputs       
-        output = pd.concat(inputs_reindex, axis = 1, sort = True)
+        output = pd.concat(inputs_reindex, axis = 1)
         output.metadata = inputs[-1].metadata
         
         # Propagate best non nan score
