@@ -9,6 +9,7 @@ from d3m.metadata.base import PrimitiveFamily
 from d3m.primitive_interfaces.supervised_learning import SupervisedLearnerPrimitiveBase
 from d3m.primitive_interfaces import base
 from d3m.primitives.classification.random_forest import SKlearn as SKRandomForestClassifier
+from sklearn.utils.multiclass import type_of_target
 
 import autonbox
 
@@ -25,8 +26,8 @@ class IterativeLabelingHyperparams(hyperparams.Hyperparams):
                                    semantic_types=['https://metadata.datadrivendiscovery.org/types/TuningParameter'],
                                    description='The number of iterations of labeling')
     frac = hyperparams.Uniform(lower=0.01, upper=1.0, default=0.2,
-                                 semantic_types=['https://metadata.datadrivendiscovery.org/types/TuningParameter'],
-                                 description='The fraction of unlabeled item to label')
+                               semantic_types=['https://metadata.datadrivendiscovery.org/types/TuningParameter'],
+                               description='The fraction of unlabeled item to label')
     blackbox = hyperparams.Primitive[SupervisedLearnerPrimitiveBase](
         primitive_families=[PrimitiveFamily.CLASSIFICATION],
         default=SKRandomForestClassifier,
@@ -151,5 +152,13 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
 
     def produce(self, *, inputs: Input, timeout: float = None, iterations: int = None) -> base.CallResult[Output]:
         output = self._prim_instance.produce(inputs=inputs)
+
+        # if output is a binary array of floats then convert values to int
+        if type_of_target(output.value) == 'binary' and len(output.value) > 0 \
+                and output.value.iloc[0].dtype == np.float64:
+            output.value = output.value.astype(int)
+
         output = container.DataFrame(output.value, generate_metadata=True)
+        # if output[0].dtype == np.float64:
+        #     output = output.astype(int)  # we don't want ["-1.0", "1.0"] when runtime computes the metric
         return base.CallResult(output)
