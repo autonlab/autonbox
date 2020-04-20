@@ -1,4 +1,6 @@
 import os
+import warnings
+
 import numpy as np
 
 import d3m.metadata
@@ -9,6 +11,9 @@ from d3m.metadata.base import PrimitiveFamily
 from d3m.primitive_interfaces.supervised_learning import SupervisedLearnerPrimitiveBase
 from d3m.primitive_interfaces import base
 from d3m.primitives.classification.random_forest import SKlearn as SKRandomForestClassifier
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.exceptions import ConvergenceWarning
+from sklearn.multiclass import OneVsRestClassifier
 from sklearn.utils.multiclass import type_of_target
 
 import autonbox
@@ -33,6 +38,10 @@ class IterativeLabelingHyperparams(hyperparams.Hyperparams):
         default=SKRandomForestClassifier,
         semantic_types=['https://metadata.datadrivendiscovery.org/types/TuningParameter'],
         description='Black box model for the classification')
+    cv = hyperparams.UniformInt(lower=1, upper=100, default=5,
+                                   semantic_types=['https://metadata.datadrivendiscovery.org/types/TuningParameter'],
+                                   description='The number of CV folds. Only used when the blackbox estimator '
+                                               'doesn\'t suuport predict_proba()')
 
 
 class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, IterativeLabelingParams,
@@ -75,6 +84,9 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
         self.y = None
         self._iters = hyperparams['iters']
         self._frac = hyperparams['frac']
+        self._cv = hyperparams['cv']
+
+        self._calibclf = None
 
     def __getstate__(self):
         return (
@@ -98,6 +110,11 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
         else:  # is an instance
             self._prim_instance = primitive
 
+        # Does _prim_instance._clf support predict_proba() call?
+        if not hasattr(self._prim_instance._clf, 'predict_proba'):
+            calibclf = CalibratedClassifierCV(self._prim_instance._clf, cv=self._cv)
+            self._calibclf = OneVsRestClassifier(calibclf)
+
         for labelIteration in range(self._iters):
             labeledSelector = y.iloc[:, 0].notnull() & (y.iloc[:, 0].apply(lambda x: x != ''))
             labeledIx = np.where(labeledSelector)[0]
@@ -109,9 +126,15 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
             labeledX = X.iloc[labeledIx]
             labeledy = y.iloc[labeledIx]
 
-            self._prim_instance.set_training_data(inputs=labeledX, outputs=labeledy)
-            self._prim_instance.fit()
-            probas = self._prim_instance._clf.predict_proba(X.iloc[unlabeledIx])
+            if self._calibclf is not None:
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=ConvergenceWarning)
+                    self._calibclf.fit(labeledX, labeledy)
+                probas = self._calibclf.predict_proba(X.iloc[unlabeledIx])
+            else:
+                self._prim_instance.set_training_data(inputs=labeledX, outputs=labeledy)
+                self._prim_instance.fit()
+                probas = self._prim_instance._clf.predict_proba(X.iloc[unlabeledIx])
 
             entropies = np.sum(np.log2(probas.clip(0.0000001, 1.0)) * probas, axis=1)
             # join the entropies and the unlabeled indecies into a single recarray and sort it by entropy
@@ -120,7 +143,11 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
 
             labelableIndices = entIdx['f1'][-num_instances_to_label:].reshape((-1,))
 
-            predictions = self._prim_instance.produce(inputs=X.iloc[labelableIndices]).value
+            if self._calibclf is not None:
+                predictions = self._calibclf.predict(X.iloc[labelableIndices])
+                predictions = container.DataFrame(predictions, generate_metadata=False)
+            else:
+                predictions = self._prim_instance.produce(inputs=X.iloc[labelableIndices]).value
             ydf = y.iloc[labelableIndices, 0]
             ydf.loc[:] = predictions.iloc[:, 0]
 
@@ -129,8 +156,13 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
         labeledX = X.iloc[labeledIx]
         labeledy = y.iloc[labeledIx]
 
-        self._prim_instance.set_training_data(inputs=labeledX, outputs=labeledy)
-        self._prim_instance.fit()
+        if self._calibclf is not None:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=ConvergenceWarning)
+                self._calibclf.fit(labeledX, labeledy)
+        else:
+            self._prim_instance.set_training_data(inputs=labeledX, outputs=labeledy)
+            self._prim_instance.fit()
         self._is_fitted = True
 
         return base.CallResult(None)
@@ -153,14 +185,19 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
         self._is_fitted = params['is_fitted']
 
     def produce(self, *, inputs: Input, timeout: float = None, iterations: int = None) -> base.CallResult[Output]:
-        output = self._prim_instance.produce(inputs=inputs)
+        if self._calibclf is not None:
+            pred = self._calibclf.predict(inputs)
+            df = container.DataFrame(pred, generate_metadata=False)
+        else:
+            pred = self._prim_instance.produce(inputs=inputs)
+            df = pred.value
 
         # if output is a binary array of floats then convert values to int
-        if type_of_target(output.value) == 'binary' and len(output.value) > 0 \
-                and output.value.iloc[0].dtype == np.float64:
-            output.value = output.value.astype(int)
+        if type_of_target(df) == 'binary' and len(df) > 0 \
+                and df.iloc[0].dtype == np.float64:
+            df = df.astype(int)
 
-        output = container.DataFrame(output.value, generate_metadata=True)
+        output = container.DataFrame(df, generate_metadata=True)
         # if output[0].dtype == np.float64:
         #     output = output.astype(int)  # we don't want ["-1.0", "1.0"] when runtime computes the metric
         return base.CallResult(output)
