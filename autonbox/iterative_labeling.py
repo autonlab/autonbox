@@ -1,5 +1,6 @@
 import os
 import warnings
+from typing import Any
 
 import numpy as np
 
@@ -24,6 +25,8 @@ Output = container.DataFrame
 
 class IterativeLabelingParams(params.Params):
     is_fitted: bool
+    calibclf: Any
+    prim_instance: Any
 
 
 class IterativeLabelingHyperparams(hyperparams.Hyperparams):
@@ -179,10 +182,15 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
         self.y = outputs
 
     def get_params(self) -> IterativeLabelingParams:
-        return IterativeLabelingParams(is_fitted=self._is_fitted)
+        return IterativeLabelingParams(
+            is_fitted=self._is_fitted,
+            calibclf=self._calibclf,
+            prim_instance=self._prim_instance)
 
     def set_params(self, *, params: IterativeLabelingParams) -> None:
         self._is_fitted = params['is_fitted']
+        self._calibclf = params['calibclf']
+        self._prim_instance = params['prim_instance']
 
     def produce(self, *, inputs: Input, timeout: float = None, iterations: int = None) -> base.CallResult[Output]:
         if self._calibclf is not None:
