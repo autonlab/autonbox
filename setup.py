@@ -40,12 +40,12 @@ setup(
     packages=find_packages(exclude=['docs', 'tests*']),
     install_requires=[
         'd3m',
-        'Pillow==6.2.1',
+        'Pillow==7.1.1',
         'numpy',
         'pandas',
         'opencv-python-headless',
-        'torch>=1.3.1',
-        'torchvision'
+        'torch==1.4.0',
+        'torchvision==0.5.0'
     ],
     entry_points=read_entry_points(),
     url='https://github.com/autonlab/autonbox',
