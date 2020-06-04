@@ -1,4 +1,5 @@
 import os
+import warnings
 
 import autonbox
 import cv2
@@ -81,24 +82,31 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
 
         self._config = ResNext101KineticsParams
 
+        torch.manual_seed(self.random_seed)  # seed the RNG for all devices (both CPU and CUDA):
+
         # Use GPU if available
         if torch.cuda.is_available():
             self.logger.info("Use GPU.")
             self._config.no_cuda = False
+            # For reproducibility on CuDNN backend
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
         else:
             self.logger.info("Use CPU.")
             self._config.no_cuda = True
 
-        self._model = generate_model(self._config)
         self._down_rate = 1
+
+    def _instantiate_model(self):
+        model = generate_model(self._config)
         model_data = self._load_model()
         if self._config.no_cuda:
             state_dict = {k.replace('module.', ''): v for k, v in model_data['state_dict'].items()}  # for cpu only
         else:
             state_dict = model_data['state_dict']
-        self._model.load_state_dict(state_dict)
-        self._model.eval()
-        self.logger.info(self._model)
+        model.load_state_dict(state_dict)
+        model.eval()
+        return model
 
     def produce(self, *, inputs: Inputs, timeout: float = None, iterations: int = None) -> CallResult[Outputs]:
         """
@@ -107,6 +115,7 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
         :param iterations:
         :return:
         """
+        model = self._instantiate_model()
         features = []
         # TODO consider a more robust means to 1) get location_base_uris and remove file://
         media_root_dir = inputs.metadata.query((0, 0))['location_base_uris'][0][len('file://'):]  # remove file://
@@ -114,7 +123,7 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
             file_path = os.path.join(media_root_dir, filename)
             if os.path.isfile(file_path):
                 video = self._read_fileuri(file_path)  # video is a ndarray of F x H x W x C, e.g. (408, 240, 320, 3)
-                feature = self._generate_vid_feature(video)
+                feature = self._generate_vid_feature(model, video)
             else:
                 self.logger.warning("No such file {}. Feature vector will be set to all zeros.".format(file_path))
                 feature = np.zeros(2048)
@@ -124,7 +133,7 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
 
         return base.CallResult(results)
 
-    def _generate_vid_feature(self, vid_matrix):
+    def _generate_vid_feature(self, model, vid_matrix):
         """
         Modified from function classify_video()
         :param vid_matrix: takes in video matrix F(frames) x H(height) x W(width) x C(channels)
@@ -147,7 +156,7 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
             for i, inputs in enumerate(data_loader):
                 inputs = Variable(inputs)
                 # input is of shape n x 3 x sample_duration x 112 x 112
-                outputs = self._model(inputs)
+                outputs = model(inputs)
                 # output is of format n(batch size) x d(dimension of feature)
                 video_outputs.append(outputs.cpu().data)
         video_outputs = np.concatenate(video_outputs, axis=0)
