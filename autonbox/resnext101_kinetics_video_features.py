@@ -150,7 +150,7 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
                      temporal_transform=temporal_transform,
                      sample_duration=self._config.sample_duration, down_rate=self._down_rate)
         data_loader = torch.utils.data.DataLoader(data, batch_size=self._config.batch_size,
-                                                  shuffle=False, num_workers=self._config.n_threads, pin_memory=True)
+                                                  shuffle=False, pin_memory=True)
         video_outputs = []
         with torch.no_grad():
             for i, inputs in enumerate(data_loader):
