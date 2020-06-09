@@ -22,7 +22,12 @@ Outputs = container.DataFrame
 
 
 class Hyperparams(hyperparams.Hyperparams):
-    pass
+    num_workers = hyperparams.Hyperparameter[int](
+        semantic_types=['https://metadata.datadrivendiscovery.org/types/ResourcesUseParameter'],
+        default=0,
+        description='The number of subprocesses to use for data loading. 0 means that the data will be loaded in the '
+                    'main process.'
+    )
 
 
 class ResNext101KineticsParams(object):
@@ -40,7 +45,6 @@ class ResNext101KineticsParams(object):
     no_cuda = True
     mean = [114.7748, 107.7354, 99.4750]
     batch_size = 32
-    n_threads = 4
 
 
 class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, Outputs, Hyperparams]):
@@ -94,6 +98,8 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
         else:
             self.logger.info("Use CPU.")
             self._config.no_cuda = True
+
+        self.logger.info('Number of workers: {}'.format(self.hyperparams['num_workers']))
 
         self._down_rate = 1
 
@@ -150,6 +156,7 @@ class ResNext101KineticsPrimitive(FeaturizationTransformerPrimitiveBase[Inputs, 
                      temporal_transform=temporal_transform,
                      sample_duration=self._config.sample_duration, down_rate=self._down_rate)
         data_loader = torch.utils.data.DataLoader(data, batch_size=self._config.batch_size,
+                                                  num_workers=self.hyperparams['num_workers'],
                                                   shuffle=False, pin_memory=True)
         video_outputs = []
         with torch.no_grad():
