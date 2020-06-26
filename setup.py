@@ -40,7 +40,7 @@ setup(
     packages=find_packages(exclude=['docs', 'tests*']),
     install_requires=[
         'd3m',
-        'Pillow==7.1.1',
+        'Pillow>=7.1.2',
         'numpy',
         'pandas',
         'opencv-python-headless',
