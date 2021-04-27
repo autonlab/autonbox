@@ -45,8 +45,8 @@ setup(
         'numpy',
         'pandas',
         'opencv-python-headless',
-        'torch==1.4.0',
-        'torchvision==0.5.0'
+        'torch>=1.4.0',
+        'torchvision>=0.5.0'
     ],
     entry_points=read_entry_points(),
     url='https://github.com/autonlab/autonbox',
