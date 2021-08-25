@@ -1,6 +1,6 @@
 import os
 import warnings
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 
@@ -209,3 +209,11 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
         # if output[0].dtype == np.float64:
         #     output = output.astype(int)  # we don't want ["-1.0", "1.0"] when runtime computes the metric
         return base.CallResult(output)
+
+    def log_likelihoods(self, *,
+                        outputs: Output,
+                        inputs: Input,
+                        timeout: float = None,
+                        iterations: int = None) -> base.CallResult[Sequence[float]]:
+        results = self._prim_instance.log_likelihoods(outputs=outputs, inputs=inputs)
+        return results
