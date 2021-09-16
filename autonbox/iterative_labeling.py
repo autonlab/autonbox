@@ -10,6 +10,7 @@ from d3m.metadata import base as metadata_base, hyperparams
 from d3m.metadata import params
 from d3m.metadata.base import PrimitiveFamily
 from d3m.primitive_interfaces.supervised_learning import SupervisedLearnerPrimitiveBase
+from d3m.primitive_interfaces.base import ProbabilisticCompositionalityMixin
 from d3m.primitive_interfaces import base
 from d3m.primitives.classification.random_forest import SKlearn as SKRandomForestClassifier
 from sklearn.calibration import CalibratedClassifierCV
@@ -47,8 +48,8 @@ class IterativeLabelingHyperparams(hyperparams.Hyperparams):
                                                'doesn\'t suuport predict_proba()')
 
 
-class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, IterativeLabelingParams,
-                                                                IterativeLabelingHyperparams]):
+class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, IterativeLabelingParams, IterativeLabelingHyperparams],
+				 ProbabilisticCompositionalityMixin[Input, Output, IterativeLabelingParams, IterativeLabelingHyperparams]):
     """
     Blackbox based iterative labeling for semi-supervised classification
     """
