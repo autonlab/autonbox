@@ -1,22 +1,27 @@
 import os
+from frozendict import frozendict, FrozenOrderedDict
 
 from d3m import container
 from d3m import utils as d3m_utils
 from d3m.primitive_interfaces import base
 from d3m.primitive_interfaces.supervised_learning import SupervisedLearnerPrimitiveBase
 from d3m.metadata import base as metadata_base
-from d3m.metadata import hyperparams
+from d3m.metadata import hyperparams, params
 
 import autonbox
 from statsforecast.arima import AutoARIMA
 
 __all__ = ('AutoARIMAWrapperPrimitive',)
 
-Inputs = container.DataFrame
+Inputs = container.ndarray
 Outputs = container.DataFrame
 
+class Params(params.Params):
+    pass
+
 class Hyperparams(hyperparams.Hyperparams):
-    h = hyperparams.UniformInt(
+
+    h = hyperparams.UniformInt(     #TODO: maybe change this to Bounded?
         lower=1,
         upper=100000,
         default=100,
@@ -24,8 +29,64 @@ class Hyperparams(hyperparams.Hyperparams):
         description="Number of periods for forecasting"
     )
 
+    X_fit = hyperparams.Union(
+        configuration=FrozenOrderedDict([
+            ("none",
+                hyperparams.Constant(
+                    default=None
+                )
+            ),
+            ("X", 
+                hyperparams.Hyperparameter(
+                    default=[[0,0],[0,0]]
+                )
+            )
+        ]),
+        default="none",
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="An optional 2-d array of exogenous variables (float) to be passed to AutoARIMA.fit()"
+    )
 
-class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Hyperparams]):
+    X_predict = hyperparams.Union(
+        configuration=FrozenOrderedDict([
+            ("none",
+                hyperparams.Constant(
+                    default=None
+                )
+            ),
+            ("X", 
+                hyperparams.Hyperparameter(
+                    default=[[0,0],[0,0]]
+                )
+            )
+        ]),
+        default="none",
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="An optional 2-d array of future exogenous variables (float) to be passed to AutoARIMA.predict()."
+    )
+    #TODO: X_predict Should have dimensions of (self.h, len(self.X_fit[0]). Is there a way to ensure this is the case?
+
+    d = hyperparams.Union(
+        configuration=FrozenOrderedDict([
+            ("auto",
+                hyperparams.Constant(
+                    default=None
+                )
+            ),
+            ("manual", 
+                hyperparams.UniformInt(
+                    lower=1,
+                    upper=10,
+                    default=2
+                )
+            )
+        ]),
+        default="auto",
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="Order of first-differencing.  Either set manually, or have it be chosen automatically."
+    )
+
+class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params, Hyperparams]):
 
     """
     #TODO: add docstring
@@ -66,9 +127,9 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         X: array-like of shape (n, n_x) optional (default=None)
             An optional 2-d numpy array of exogenous variables (float).
         """
-        self.autoArima = AutoARIMA() #init with params from self.hyperparams
-        self.autoArima.fit(y=inputs) #add exogenous variables
-        #set is_fit to true
+        self.autoArima = AutoARIMA() #TODO: init with params from self.hyperparams
+        self.autoArima.fit(y=inputs, X=self.hyperparams['X_fit'])
+        #TODO: set is_fit to true
         return base.CallResult[None]
 
     def produce(self, *, inputs: Inputs, timeout: float = None, iterations: int = None) -> base.CallResult[Outputs]:
@@ -89,5 +150,5 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
             The confidence intervals for the forecasts are returned if
             level is not None.
         """
-        predictions = self.autoArima.predict(h=self.hyperparams['h'])
+        predictions = self.autoArima.predict(h=self.hyperparams['h'], X=self.hyperparams['X_predict'])
         return base.CallResult(value=inputs)
