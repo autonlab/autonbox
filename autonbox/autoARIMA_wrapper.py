@@ -66,6 +66,24 @@ class Hyperparams(hyperparams.Hyperparams):
     )
     #TODO: X_predict Should have dimensions of (self.h, len(self.X_fit[0]). Is there a way to ensure this is the case?
 
+    level = hyperparams.Union(
+        configuration=FrozenOrderedDict([
+            ("none",
+                hyperparams.Constant(
+                    default=None
+                )
+            ),
+            ("level", 
+                hyperparams.Hyperparameter(
+                    default=(0, 0)
+                )
+            )
+        ]),
+        default="none",
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="An optional tuple of ints representing confidence levels for prediction intervals"
+    )
+
     d = hyperparams.Union(
         configuration=FrozenOrderedDict([
             ("auto",
@@ -85,6 +103,283 @@ class Hyperparams(hyperparams.Hyperparams):
         semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
         description="Order of first-differencing.  Either set manually, or have it be chosen automatically."
     )
+    #TODO: i think test only matters if d is None?  update hyperparams to reflect this
+
+    D = hyperparams.Union(
+        configuration=FrozenOrderedDict([
+            ("auto",
+                hyperparams.Constant(
+                    default=None
+                )
+            ),
+            ("manual", 
+                hyperparams.UniformInt(
+                    lower=1,
+                    upper=10,
+                    default=2
+                )
+            )
+        ]),
+        default="auto",
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="Order of seasonal-differencing.  Either set manually, or have it be chosen automatically."
+    )
+    #TODO: I think seasontest only matters if D is none?  update hyperparams to reflect this
+
+    max_p = hyperparams.UniformInt(
+        lower=1,
+        upper=100,
+        default=5,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="Maximum value of p"
+    )
+
+    max_q = hyperparams.UniformInt(
+        lower=1,
+        upper=100,
+        default=5,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="Maximum value of q"
+    )
+
+    max_P = hyperparams.UniformInt(
+        lower=1,
+        upper=100,
+        default=2,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="Maximum value of P"
+    )
+
+    max_Q = hyperparams.UniformInt(
+        lower=1,
+        upper=100,
+        default=2,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="Maximum value of Q"
+    )
+
+    max_order = hyperparams.UniformInt(
+        lower=1,
+        upper=100,
+        default=5,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="Maximum value of p+q+P+Q if model selection is not stepwise"
+    )
+
+    max_d = hyperparams.UniformInt(
+        lower=1,
+        upper=10,
+        default=2,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="Maximum number of non-seasonal differences"
+    )
+
+    max_D = hyperparams.UniformInt(
+        lower=1,
+        upper=10,
+        default=1,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="Maximum number of seasonal differences"
+    )
+
+    start_p = hyperparams.UniformInt(
+        lower=1,
+        upper=10,
+        default=2,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="Starting value of p in stepwise procedure"
+    )
+
+    start_q = hyperparams.UniformInt(
+        lower=1,
+        upper=10,
+        default=2,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="Starting value of q in stepwise procedure"
+    )
+
+    start_P = hyperparams.UniformInt(
+        lower=1,
+        upper=10,
+        default=1,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="Starting value of P in stepwise procedure"
+    )
+
+    start_Q = hyperparams.UniformInt(
+        lower=1,
+        upper=10,
+        default=1,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="Starting value of Q in stepwise procedure"
+    )
+
+    stationary = hyperparams.UniformBool(
+        default=False,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="If False, restricts search to non-seasonal models."
+    )
+
+    ic = hyperparams.Enumeration(
+        values=["aic", "aicc", "bic"],
+        default="aicc",
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="information criterion used in model selection"
+    )
+
+    stepwise = hyperparams.UniformBool(
+        default=True,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="If True, will do stepwise selection (faster).  Otherwise, it searches over all models.  Non-stepwise selection can be very slow, especially for seasonal models."
+    )
+
+    nmodels=hyperparams.UniformInt(
+        lower=1,
+        upper=500,
+        default=94,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="Maximum number of models considered in the stepwise search."
+    )
+
+    trace=hyperparams.UniformBool(
+        default=False,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="If True, the list of ARIMA models considered will be reported."
+    )
+
+    approximation = hyperparams.Enumeration(
+        values = [True, False, None],
+        default=None,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="If True, estimation is via conditional sums of squares and the information criteria used for model selection are approximated. The final model is still computed using maximum likelihood estimation. Approximation should be used for long time series or a high seasonal period to avoid excessive computation times."
+    )
+
+    method = hyperparams.Enumeration(
+        values = ("CSS", "CSS-ML", "ML", None),
+        default=None,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="fitting method: maximum likelihood or minimize conditional sum-of-squares.  The default (unless there are missing values) is to use conditional-sum-of-squares to find starting values, then maximum likelihood. Can be abbreviated."
+    )
+
+    truncate = hyperparams.Union(
+        configuration=FrozenOrderedDict([
+            ("none",
+                hyperparams.Constant(
+                    default=None
+                )
+            ),
+            ("truncate", 
+                hyperparams.UniformInt(
+                    lower=1,
+                    upper=100,
+                    default=50
+                )
+            )
+        ]),
+        default="none",
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="An integer value indicating how many observations to use in model selection.  The last truncate values of the series are used to select a model when truncate is not None and approximation=True. All observations are used if either truncate=None or approximation=False."
+    )
+
+    test = hyperparams.Enumeration(
+        values=("kpss",),
+        default="kpss",
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="Type of unit root test to use. See ndiffs for details."
+    )
+
+    test_kwargs = hyperparams.Constant(
+        default = {},
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description = "A dictionary of keyword arguments to be passed to the unit root test.  At the time of writing, the only argument that is read is alpha."
+    )
+
+    seasonal_test = hyperparams.Enumeration(
+        values=("seas", "ocsb"),
+        default="seas",
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="This determines which method is used to select the number of seasonal differences. The default method is to use a measure of seasonal strength computed from an STL decomposition. Other possibilities involve seasonal unit root tests."
+    )
+
+    seasonal_test_kwargs = hyperparams.Constant(
+        default = {},
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description = "A dictionary of keyword arguments to be passed to the seasonal unit root test.  At the time of writing, the only argument that is read is alpha."
+    )
+
+    allowdrift = hyperparams.UniformBool(
+        default=True,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="If True, models with drift terms are considered."
+    )
+
+    allowmean = hyperparams.UniformBool(
+        default=True,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="If True, models with a non-zero mean are considered."
+    )
+
+    blambda = hyperparams.Union(
+        configuration=FrozenOrderedDict([
+            ("none or auto",
+                hyperparams.Enumeration(
+                    values = (None, "auto"),
+                    default=None
+                )
+            ),
+            ("blambda", 
+                hyperparams.Uniform(
+                    lower=-5.0,
+                    upper=5.0,
+                    default=0.0
+                )
+            )
+        ]),
+        default="none or auto",
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="Box-Cox transformation parameter.  If lambda=\"auto\", then a transformation is automatically selected using BoxCox.lambda. The transformation is ignored if None. Otherwise, data transformed before model is estimated."
+    )
+
+    biasadj = hyperparams.UniformBool(
+        default=False,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="Use adjusted back-transformed mean for Box-Cox transformations.  If transformed data is used to produce forecasts and fitted values, a regular back transformation will result in median forecasts. If biasadj is True, an adjustment will be made to produce mean forecasts and fitted values."
+    )
+
+    parallel = hyperparams.UniformBool(
+        default=False,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ResourcesUseParameter"],
+        description="If True and stepwise = False, then the specification search is done in parallel. This can give a significant speedup on multicore machines."
+    )
+
+    num_cores = hyperparams.Union(
+        configuration=FrozenOrderedDict([
+            ("none",
+                hyperparams.Constant(
+                    default=None
+                )
+            ),
+            ("num_cores", 
+                hyperparams.UniformInt(
+                    lower=1,
+                    upper=20,
+                    default=2
+                )
+            )
+        ]),
+        default="num_cores",
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ResourcesUseParameter"],
+        description="Allows the user to specify the amount of parallel processes to be used if parallel = True and stepwise = False. If None, then the number of logical cores is automatically detected and all available cores are used."
+    )
+
+    period = hyperparams.UniformInt(
+        lower=1,
+        upper=1000,
+        default=1,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="Number of observations per unit of time. For example 24 for Hourly data."
+    )
+
 
 class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params, Hyperparams]):
 
@@ -150,5 +445,7 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
             The confidence intervals for the forecasts are returned if
             level is not None.
         """
-        predictions = self.autoArima.predict(h=self.hyperparams['h'], X=self.hyperparams['X_predict'])
+        #TODO: check if is_fit is true
+
+        predictions = self.autoArima.predict(h=self.hyperparams['h'], X=self.hyperparams['X_predict'], level=self.hyperparams['level'])
         return base.CallResult(value=inputs)
