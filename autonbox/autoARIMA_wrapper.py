@@ -23,7 +23,7 @@ class Hyperparams(hyperparams.Hyperparams):
 
     h = hyperparams.UniformInt(     #TODO: maybe change this to Bounded?
         lower=1,
-        upper=100000,
+        upper=1000,
         default=100,
         semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
         description="Number of periods for forecasting"
@@ -251,14 +251,14 @@ class Hyperparams(hyperparams.Hyperparams):
         values = [True, False, None],
         default=None,
         semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
-        description="If True, estimation is via conditional sums of squares and the information criteria used for model selection are approximated. The final model is still computed using maximum likelihood estimation. Approximation should be used for long time series or a high seasonal period to avoid excessive computation times."
+        description="If True, estimation is via conditional sums of squares and the information criteria used for model selection are approximated. The final model is still computed using maximum likelihood estimation. Approximation should be used for long time series or a high seasonal period to avoid excessive computation times.  If set to None, AutoARIMA will decide whether to approximate."
     )
 
     method = hyperparams.Enumeration(
         values = ("CSS", "CSS-ML", "ML", None),
         default=None,
         semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
-        description="fitting method: maximum likelihood or minimize conditional sum-of-squares.  The default (unless there are missing values) is to use conditional-sum-of-squares to find starting values, then maximum likelihood. Can be abbreviated."
+        description="fitting method: maximum likelihood or minimize conditional sum-of-squares.  If None, will choose automatically"
     )
 
     truncate = hyperparams.Union(
@@ -386,7 +386,7 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
     """
     #TODO: add docstring
     """
-    metadata = hyperparams.base.PrimitiveMetadata({
+    metadata = metadata_base.PrimitiveMetadata({
         "id": "434d4d25-dd61-4a32-a624-0f983995e189",
         "version": "0.1.0",
         "name": "AutoARIMA Wrapper",
@@ -427,7 +427,7 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         #TODO: set is_fit to true
         return base.CallResult[None]
 
-    def produce(self, *, inputs: Inputs, timeout: float = None, iterations: int = None) -> base.CallResult[Outputs]:
+    def produce(self, *, timeout: float = None, iterations: int = None) -> base.CallResult[Outputs]:
         """From Kin's code:
         Forecast future values using a fitted AutoArima.
         Parameters
