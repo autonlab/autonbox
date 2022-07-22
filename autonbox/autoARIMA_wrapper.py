@@ -1,5 +1,6 @@
 import os
-from frozendict import frozendict, FrozenOrderedDict
+import typing
+from frozendict import FrozenOrderedDict
 
 from d3m import container
 from d3m import utils as d3m_utils
@@ -7,6 +8,7 @@ from d3m.primitive_interfaces import base
 from d3m.primitive_interfaces.supervised_learning import SupervisedLearnerPrimitiveBase
 from d3m.metadata import base as metadata_base
 from d3m.metadata import hyperparams, params
+from d3m.exceptions import MissingValueError
 
 import autonbox
 from statsforecast.arima import AutoARIMA
@@ -24,7 +26,7 @@ class Hyperparams(hyperparams.Hyperparams):
     h = hyperparams.UniformInt(     #TODO: maybe change this to Bounded?
         lower=1,
         upper=1000,
-        default=100,
+        default=20,
         semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
         description="Number of periods for forecasting"
     )
@@ -393,7 +395,7 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         "description": "Wrapper of the AutoARIMA class from statsforecast package",
         "python_path": "d3m.primitives.time_series_forecasting.arima.AutonBox",
         "primitive_family": metadata_base.PrimitiveFamily.TIME_SERIES_FORECASTING,
-        "algorithm_types": [], #TODO add these
+        "algorithm_types": ["AUTOREGRESSIVE_INTEGRATED_MOVING_AVERAGE"],
         'source': {
             'name': autonbox.__author__,
             'uris': ['https://github.com/autonlab/autonbox'],
@@ -409,7 +411,34 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         }]
     })
 
-    def fit(self, *, inputs: Inputs, timeout: float = None, iterations: int = None) -> base.CallResult[None]:
+    def __init__(self, *, hyperparams: Hyperparams) -> None:
+        super().__init__(hyperparams=hyperparams)
+
+        self._fitted = False
+        self._training_inputs = None
+        self._new_training_data = False
+        self.autoArima = AutoARIMA() #TODO: init with params from self.hyperparams
+
+    def get_params(self) -> Params:
+        return self._params
+
+    def set_params(self, *, params: Params) -> None:
+        self._params = params
+
+    def set_training_data(self, *, inputs: Inputs, outputs: Outputs) -> None:
+        
+        #print("Inputs:")
+        #print(inputs)
+        #print("Outputs:")
+        #print(outputs)
+        
+        #outputs are ignored but argument is required to correctly implement 
+        #  abstract method in d3m.primitive_interfaces.base.PrimitiveBase
+
+        self._training_inputs = inputs
+        self._new_training_data = True
+
+    def fit(self, *, timeout: float = None, iterations: int = None) -> base.CallResult[None]:
         """From Kin's code:
         Fit the AutoARIMA estimator
         Fit an AutoARIMA to a time series (numpy array) `y`
@@ -422,12 +451,20 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         X: array-like of shape (n, n_x) optional (default=None)
             An optional 2-d numpy array of exogenous variables (float).
         """
-        self.autoArima = AutoARIMA() #TODO: init with params from self.hyperparams
-        self.autoArima.fit(y=inputs, X=self.hyperparams['X_fit'])
-        #TODO: set is_fit to true
+        if self._training_inputs is None:
+            raise MissingValueError("fit() called before training data set, call set_training_data() first.")
+        
+        if self._fitted == True and self._new_training_data == False:
+            self.logger.warning("Model is already fit and training data has not changed.  Model will be refit from scratch, but expect nothing to change.")
+
+        #print("training inputs:")
+        #print(self._training_inputs)
+
+        self.autoArima.fit(y=self._training_inputs, X=self.hyperparams['X_fit'])
+        self.fitted = True
         return base.CallResult[None]
 
-    def produce(self, *, timeout: float = None, iterations: int = None) -> base.CallResult[Outputs]:
+    def produce(self, *, inputs: Inputs, timeout: float = None, iterations: int = None) -> base.CallResult[Outputs]:
         """From Kin's code:
         Forecast future values using a fitted AutoArima.
         Parameters
@@ -445,7 +482,13 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
             The confidence intervals for the forecasts are returned if
             level is not None.
         """
-        #TODO: check if is_fit is true
 
+        #inputs are ignored but argument is required to correctly implement 
+        #  abstract method in d3m.primitive_interfaces.base.PrimitiveBase
+
+        #TODO: check if alrready fitted
         predictions = self.autoArima.predict(h=self.hyperparams['h'], X=self.hyperparams['X_predict'], level=self.hyperparams['level'])
-        return base.CallResult(value=inputs)
+        return base.CallResult(value=predictions)
+
+
+
