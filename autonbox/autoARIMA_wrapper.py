@@ -8,14 +8,14 @@ from d3m.primitive_interfaces import base
 from d3m.primitive_interfaces.supervised_learning import SupervisedLearnerPrimitiveBase
 from d3m.metadata import base as metadata_base
 from d3m.metadata import hyperparams, params
-from d3m.exceptions import MissingValueError
+from d3m.exceptions import MissingValueError, PrimitiveNotFittedError
 
 import autonbox
 from statsforecast.arima import AutoARIMA
 
 __all__ = ('AutoARIMAWrapperPrimitive',)
 
-Inputs = container.ndarray
+Inputs = container.DataFrame
 Outputs = container.DataFrame
 
 class Params(params.Params):
@@ -31,6 +31,7 @@ class Hyperparams(hyperparams.Hyperparams):
         description="Number of periods for forecasting"
     )
 
+    '''
     X_fit = hyperparams.Union(
         configuration=FrozenOrderedDict([
             ("none",
@@ -67,6 +68,7 @@ class Hyperparams(hyperparams.Hyperparams):
         description="An optional 2-d array of future exogenous variables (float) to be passed to AutoARIMA.predict()."
     )
     #TODO: X_predict Should have dimensions of (self.h, len(self.X_fit[0]). Is there a way to ensure this is the case?
+    '''
 
     level = hyperparams.Union(
         configuration=FrozenOrderedDict([
@@ -416,8 +418,9 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
 
         self._fitted = False
         self._training_inputs = None
+        self._training_outputs = None
         self._new_training_data = False
-        self.autoArima = AutoARIMA() #TODO: init with params from self.hyperparams
+        self._autoArima = AutoARIMA() #TODO: init with params from self.hyperparams
 
     def get_params(self) -> Params:
         return self._params
@@ -432,10 +435,14 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         #print("Outputs:")
         #print(outputs)
         
-        #outputs are ignored but argument is required to correctly implement 
-        #  abstract method in d3m.primitive_interfaces.base.PrimitiveBase
+        #inputs is optional exogenous data (can be None)
+        #TODO: add a hyperparam for is_exogenous?  or exogenous_cols?
 
-        self._training_inputs = inputs
+        #outputs is the time series that we want to predict future values of
+        #TODO: check that outputs has one column
+
+        self._training_exogenous = inputs
+        self._training_target = outputs
         self._new_training_data = True
 
     def fit(self, *, timeout: float = None, iterations: int = None) -> base.CallResult[None]:
@@ -451,7 +458,7 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         X: array-like of shape (n, n_x) optional (default=None)
             An optional 2-d numpy array of exogenous variables (float).
         """
-        if self._training_inputs is None:
+        if self._training_target is None:
             raise MissingValueError("fit() called before training data set, call set_training_data() first.")
         
         if self._fitted == True and self._new_training_data == False:
@@ -460,8 +467,13 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         #print("training inputs:")
         #print(self._training_inputs)
 
-        self.autoArima.fit(y=self._training_inputs, X=self.hyperparams['X_fit'])
-        self.fitted = True
+        #Kin's code takes a 1-dimensional ndarray for y
+        y = self._training_target.to_numpy().flatten()
+        #print("inputs to kin's code:")
+        #print(y)
+
+        self._autoArima.fit(y=y, X=self._training_exogenous)
+        self._fitted = True
         return base.CallResult[None]
 
     def produce(self, *, inputs: Inputs, timeout: float = None, iterations: int = None) -> base.CallResult[Outputs]:
@@ -483,11 +495,13 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
             level is not None.
         """
 
-        #inputs are ignored but argument is required to correctly implement 
-        #  abstract method in d3m.primitive_interfaces.base.PrimitiveBase
+        #inputs is optional future exogenous data (can be None)
+        #TODO: check that future and past exogenous data match
 
-        #TODO: check if alrready fitted
-        predictions = self.autoArima.predict(h=self.hyperparams['h'], X=self.hyperparams['X_predict'], level=self.hyperparams['level'])
+        if not self._fitted:
+            raise PrimitiveNotFittedError("Primitive not fitted.")
+
+        predictions = self._autoArima.predict(h=self.hyperparams['h'], X=inputs, level=self.hyperparams['level'])
         return base.CallResult(value=predictions)
 
 
