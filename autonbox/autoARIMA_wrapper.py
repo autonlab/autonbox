@@ -19,14 +19,16 @@ Inputs = container.DataFrame
 Outputs = container.DataFrame
 
 class Params(params.Params):
-    pass
+    fitted: bool
+    new_training_data: typing.Any
+    autoARIMA: typing.Any
 
 class Hyperparams(hyperparams.Hyperparams):
 
     h = hyperparams.UniformInt(     #TODO: maybe change this to Bounded?
         lower=1,
         upper=1000,
-        default=20,
+        default=10,
         semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
         description="Number of periods for forecasting"
     )
@@ -393,7 +395,7 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
     metadata = metadata_base.PrimitiveMetadata({
         "id": "434d4d25-dd61-4a32-a624-0f983995e189",
         "version": "0.1.0",
-        "name": "AutoARIMA Wrapper",
+        "name": "statsforecast.arima.AutoARIMA",
         "description": "Wrapper of the AutoARIMA class from statsforecast package",
         "python_path": "d3m.primitives.time_series_forecasting.arima.AutonBox",
         "primitive_family": metadata_base.PrimitiveFamily.TIME_SERIES_FORECASTING,
@@ -414,26 +416,37 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
     })
 
     def __init__(self, *, hyperparams: Hyperparams) -> None:
+        print("calling __init__")
+
         super().__init__(hyperparams=hyperparams)
 
         self._fitted = False
-        self._training_inputs = None
-        self._training_outputs = None
+        self._training_target = None
+        self._training_exogenous = None
         self._new_training_data = False
-        self._autoArima = AutoARIMA() #TODO: init with params from self.hyperparams
+        self._autoARIMA = AutoARIMA() #TODO: init with params from self.hyperparams
 
     def get_params(self) -> Params:
-        return self._params
+        print("calling get_params")
+        return Params(
+            fitted = self._fitted,
+            new_training_data = self._new_training_data,
+            autoARIMA = self._autoARIMA
+        )
 
     def set_params(self, *, params: Params) -> None:
-        self._params = params
+        print("calling set_params, params argument:")
+        print(params)
+        self._fitted = params['fitted']
+        self._new_training_data = params['new_training_data']
+        self._autoARIMA = params['autoARIMA']
 
     def set_training_data(self, *, inputs: Inputs, outputs: Outputs) -> None:
-        
-        #print("Inputs:")
-        #print(inputs)
-        #print("Outputs:")
-        #print(outputs)
+        print("calling set_training_data")
+        print("Inputs:")
+        print(inputs)
+        print("Outputs:")
+        print(outputs)
         
         #inputs is optional exogenous data (can be None)
         #TODO: add a hyperparam for is_exogenous?  or exogenous_cols?
@@ -441,7 +454,7 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         #outputs is the time series that we want to predict future values of
         #TODO: check that outputs has one column
 
-        self._training_exogenous = inputs
+        self._training_exogenous = None
         self._training_target = outputs
         self._new_training_data = True
 
@@ -458,6 +471,8 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         X: array-like of shape (n, n_x) optional (default=None)
             An optional 2-d numpy array of exogenous variables (float).
         """
+        print("calling fit")
+
         if self._training_target is None:
             raise MissingValueError("fit() called before training data set, call set_training_data() first.")
         
@@ -471,10 +486,11 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         y = self._training_target.to_numpy().flatten()
         #print("inputs to kin's code:")
         #print(y)
-
-        self._autoArima.fit(y=y, X=self._training_exogenous)
+        print("fitting on y:")
+        print(y)
+        self._autoARIMA.fit(y=y, X=None)
         self._fitted = True
-        return base.CallResult[None]
+        return base.CallResult(None)
 
     def produce(self, *, inputs: Inputs, timeout: float = None, iterations: int = None) -> base.CallResult[Outputs]:
         """From Kin's code:
@@ -494,6 +510,9 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
             The confidence intervals for the forecasts are returned if
             level is not None.
         """
+        print("calling produce")
+        print("Inputs:")
+        print(inputs)
 
         #inputs is optional future exogenous data (can be None)
         #TODO: check that future and past exogenous data match
@@ -501,8 +520,15 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         if not self._fitted:
             raise PrimitiveNotFittedError("Primitive not fitted.")
 
-        predictions = self._autoArima.predict(h=self.hyperparams['h'], X=inputs, level=self.hyperparams['level'])
-        return base.CallResult(value=predictions)
+        nrows = inputs.shape[0]
+        print("nrows:")
+        print(nrows)
+
+        predictions = self._autoARIMA.predict(h=nrows, X=None, level=self.hyperparams['level'])
+        print("predictions:")
+        print(predictions)
+        output = container.DataFrame(predictions, generate_metadata=True)
+        return base.CallResult(output)
 
 
 
