@@ -25,96 +25,12 @@ class Params(params.Params):
 
 class Hyperparams(hyperparams.Hyperparams):
 
-    '''
-    h = hyperparams.UniformInt(     #TODO: maybe change this to Bounded?
-        lower=1,
-        upper=1000,
-        default=10,
-        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
-        description="Number of periods for forecasting"
-    )
-
-
-    X_fit = hyperparams.Union(
-        configuration=FrozenOrderedDict([
-            ("none",
-                hyperparams.Constant(
-                    default=None
-                )
-            ),
-            ("X", 
-                hyperparams.Hyperparameter(
-                    default=[[0,0],[0,0]]
-                )
-            )
-        ]),
-        default="none",
-        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
-        description="An optional 2-d array of exogenous variables (float) to be passed to AutoARIMA.fit()"
-    )
-
-    X_predict = hyperparams.Union(
-        configuration=FrozenOrderedDict([
-            ("none",
-                hyperparams.Constant(
-                    default=None
-                )
-            ),
-            ("X", 
-                hyperparams.Hyperparameter(
-                    default=[[0,0],[0,0]]
-                )
-            )
-        ]),
-        default="none",
-        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
-        description="An optional 2-d array of future exogenous variables (float) to be passed to AutoARIMA.predict()."
-    )
-    #TODO: X_predict Should have dimensions of (self.h, len(self.X_fit[0]). Is there a way to ensure this is the case?
-    '''
-
-    '''
-    exogenous_cols = hyperparams.Set(
-        elements=hyperparams.Hyperparameter(
-            default=-1,
-            semantic_types=[]
-        ),
-        default=[],
-        semantic_types = ["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
-        description = "Columns to use as exogenous variables to be passed in to AutoARIMA.fit() and AutoARIMA.predict().",
-        is_configuration = False,
-        min_size = 0
-    )
-    '''
-
     exogenous_cols = hyperparams.List(
         elements=hyperparams.Hyperparameter[str](""),
         default=[],
         semantic_types = ["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
         description = "Columns to use as exogenous variables to be passed in to AutoARIMA.fit() and AutoARIMA.predict().",
     )
-
-    '''
-    #doesn't work
-    exogenous_cols = hyperparams.Union(
-        configuration=FrozenOrderedDict([
-            ("none",
-                hyperparams.Constant(
-                    default=None
-                )
-            ),
-            ("exogenous_cols", 
-                hyperparams.List(
-                    elements=hyperparams.Hyperparameter[str](""),
-                    default=[]
-                )
-            )
-        ]),
-        default="none",
-        semantic_types = ["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
-        description = "Names of columns to use as exogenous variables to be passed in to AutoARIMA.fit() and AutoARIMA.predict().  Can be None.",
-    )
-    '''
 
     #currently, setting this throws an error
     level = hyperparams.List(
@@ -129,34 +45,6 @@ class Hyperparams(hyperparams.Hyperparams):
         semantic_types = ["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
         description="An optional list of ints between 50 and 100 representing %% confidence levels for prediction intervals",
     )
-
-    '''
-    #doesn't work
-    level = hyperparams.Union(
-        configuration=FrozenOrderedDict([
-            ("none",
-                hyperparams.Constant(
-                    default=None
-                )
-            ),
-            ("level", 
-                hyperparams.List(
-                    elements=hyperparams.Uniform(
-                        default=0.05,
-                        lower=0.0,
-                        upper=1.0,
-                        lower_inclusive=False,
-                        upper_inclusive=False
-                    ),
-                    default=[]
-                )
-            )
-        ]),
-        default="none",
-        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
-        description="An optional list of floats between 0 and 1 representing confidence levels for prediction intervals"
-    )
-    '''
 
     d = hyperparams.Union(
         configuration=FrozenOrderedDict([
@@ -290,6 +178,12 @@ class Hyperparams(hyperparams.Hyperparams):
 
     stationary = hyperparams.UniformBool(
         default=False,
+        semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="If True, restricts search to stationary models."
+    )
+
+    seasonal = hyperparams.UniformBool(
+        default=True,
         semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
         description="If False, restricts search to non-seasonal models."
     )
@@ -492,7 +386,7 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         self._training_target = None
         self._training_exogenous = None
         self._new_training_data = False
-        self._autoARIMA = AutoARIMA() #TODO: init with params from self.hyperparams
+        self._autoARIMA = None
 
     def get_params(self) -> Params:
         print("calling get_params")
@@ -540,6 +434,80 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
             An optional 2-d numpy array of exogenous variables (float).
         """
         print("calling fit")
+
+        #make hyperparams into local variables for convenience
+        d = self.hyperparams['d']
+        D = self.hyperparams['D']
+        max_p = self.hyperparams['max_p']
+        max_q = self.hyperparams['max_q']
+        max_P = self.hyperparams['max_P']
+        max_Q = self.hyperparams['max_Q']
+        max_order = self.hyperparams['max_order']
+        max_d = self.hyperparams['max_d']
+        max_D = self.hyperparams['max_D']
+        start_p = self.hyperparams['start_p']
+        start_q = self.hyperparams['start_q']
+        start_P = self.hyperparams['start_P']
+        start_Q = self.hyperparams['start_Q']
+        stationary = self.hyperparams['stationary']
+        seasonal = self.hyperparams['seasonal']
+        ic = self.hyperparams['ic']
+        stepwise = self.hyperparams['stepwise']
+        nmodels = self.hyperparams['nmodels']
+        trace = self.hyperparams['trace']
+        approximation = self.hyperparams['approximation']
+        method = self.hyperparams['method']
+        truncate = self.hyperparams['truncate']
+        test = self.hyperparams['test']
+        test_kwargs = self.hyperparams['test_kwargs']
+        seasonal_test = self.hyperparams['seasonal_test']
+        seasonal_test_kwargs = self.hyperparams['seasonal_test_kwargs']
+        allowdrift = self.hyperparams['allowdrift']
+        allowmean = self.hyperparams['allowmean']
+        blambda = self.hyperparams['blambda']
+        biasadj = self.hyperparams['biasadj']
+        parallel = self.hyperparams['parallel']
+        num_cores = self.hyperparams['num_cores']
+        period = self.hyperparams['period']
+
+        #TODO: make sure hyperparams have correct values
+
+        #instantiate self._autoARIMA
+        self._autoARIMA = AutoARIMA(
+            d = d,
+            D = D,
+            max_p = max_p,
+            max_q = max_q,
+            max_P = max_P,
+            max_Q = max_Q,
+            max_order = max_order,
+            max_d = max_d,
+            max_D = max_D,
+            start_p = start_p,
+            start_q = start_q,
+            start_P = start_P,
+            start_Q = start_Q,
+            stationary = stationary,
+            seasonal = seasonal,
+            ic = ic,
+            stepwise = stepwise,
+            nmodels = nmodels,
+            trace = trace,
+            approximation = approximation,
+            method = method,
+            truncate = truncate,
+            test = test,
+            test_kwargs = test_kwargs,
+            seasonal_test = seasonal_test,
+            seasonal_test_kwargs = seasonal_test_kwargs,
+            allowdrift = allowdrift,
+            allowmean = allowmean,
+            blambda = blambda,
+            biasadj = biasadj,
+            parallel = parallel,
+            num_cores = num_cores,
+            period = period
+        )
 
         if self._training_target is None:
             raise MissingValueError("fit() called before training data set, call set_training_data() first.")
