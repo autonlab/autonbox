@@ -25,6 +25,7 @@ class Params(params.Params):
 
 class Hyperparams(hyperparams.Hyperparams):
 
+    '''
     h = hyperparams.UniformInt(     #TODO: maybe change this to Bounded?
         lower=1,
         upper=1000,
@@ -33,7 +34,7 @@ class Hyperparams(hyperparams.Hyperparams):
         description="Number of periods for forecasting"
     )
 
-    '''
+
     X_fit = hyperparams.Union(
         configuration=FrozenOrderedDict([
             ("none",
@@ -72,6 +73,65 @@ class Hyperparams(hyperparams.Hyperparams):
     #TODO: X_predict Should have dimensions of (self.h, len(self.X_fit[0]). Is there a way to ensure this is the case?
     '''
 
+    '''
+    exogenous_cols = hyperparams.Set(
+        elements=hyperparams.Hyperparameter(
+            default=-1,
+            semantic_types=[]
+        ),
+        default=[],
+        semantic_types = ["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description = "Columns to use as exogenous variables to be passed in to AutoARIMA.fit() and AutoARIMA.predict().",
+        is_configuration = False,
+        min_size = 0
+    )
+    '''
+
+    exogenous_cols = hyperparams.List(
+        elements=hyperparams.Hyperparameter[str](""),
+        default=[],
+        semantic_types = ["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description = "Columns to use as exogenous variables to be passed in to AutoARIMA.fit() and AutoARIMA.predict().",
+    )
+
+    '''
+    #doesn't work
+    exogenous_cols = hyperparams.Union(
+        configuration=FrozenOrderedDict([
+            ("none",
+                hyperparams.Constant(
+                    default=None
+                )
+            ),
+            ("exogenous_cols", 
+                hyperparams.List(
+                    elements=hyperparams.Hyperparameter[str](""),
+                    default=[]
+                )
+            )
+        ]),
+        default="none",
+        semantic_types = ["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description = "Names of columns to use as exogenous variables to be passed in to AutoARIMA.fit() and AutoARIMA.predict().  Can be None.",
+    )
+    '''
+
+    #currently, setting this throws an error
+    level = hyperparams.List(
+        elements=hyperparams.Uniform(
+            default=95,
+            lower=50,
+            upper=100,
+            lower_inclusive=True,
+            upper_inclusive=False
+        ),
+        default=[],
+        semantic_types = ["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
+        description="An optional list of ints between 50 and 100 representing %% confidence levels for prediction intervals",
+    )
+
+    '''
+    #doesn't work
     level = hyperparams.Union(
         configuration=FrozenOrderedDict([
             ("none",
@@ -80,15 +140,23 @@ class Hyperparams(hyperparams.Hyperparams):
                 )
             ),
             ("level", 
-                hyperparams.Hyperparameter(
-                    default=(0, 0)
+                hyperparams.List(
+                    elements=hyperparams.Uniform(
+                        default=0.05,
+                        lower=0.0,
+                        upper=1.0,
+                        lower_inclusive=False,
+                        upper_inclusive=False
+                    ),
+                    default=[]
                 )
             )
         ]),
         default="none",
         semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
-        description="An optional tuple of ints representing confidence levels for prediction intervals"
+        description="An optional list of floats between 0 and 1 representing confidence levels for prediction intervals"
     )
+    '''
 
     d = hyperparams.Union(
         configuration=FrozenOrderedDict([
@@ -454,7 +522,7 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         #outputs is the time series that we want to predict future values of
         #TODO: check that outputs has one column
 
-        self._training_exogenous = None
+        self._training_exogenous = inputs
         self._training_target = outputs
         self._new_training_data = True
 
@@ -486,9 +554,20 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         y = self._training_target.to_numpy().flatten()
         #print("inputs to kin's code:")
         #print(y)
-        print("fitting on y:")
-        print(y)
-        self._autoARIMA.fit(y=y, X=None)
+
+        exogenous_cols = list(self.hyperparams['exogenous_cols'])
+        print("exogenous_cols:")
+        print(exogenous_cols)
+        
+        if (exogenous_cols == []):
+            X = None
+        else:
+            X = self._training_exogenous.loc[:, exogenous_cols].to_numpy()
+
+        #print("X:")
+        #print(X)
+
+        self._autoARIMA.fit(y=y, X=X)
         self._fitted = True
         return base.CallResult(None)
 
@@ -524,7 +603,19 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         print("nrows:")
         print(nrows)
 
-        predictions = self._autoARIMA.predict(h=nrows, X=None, level=self.hyperparams['level'])
+        exogenous_cols = list(self.hyperparams['exogenous_cols'])
+        print("exogenous_cols:")
+        print(exogenous_cols)
+        
+        if (exogenous_cols == []):
+            X = None
+        else:
+            X = inputs.loc[:, exogenous_cols].to_numpy()
+
+        #print("X:")
+        #print(X)
+
+        predictions = self._autoARIMA.predict(h=nrows, X=X, level=self.hyperparams['level'])
         print("predictions:")
         print(predictions)
         output = container.DataFrame(predictions, generate_metadata=True)
