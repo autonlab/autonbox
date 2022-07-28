@@ -420,6 +420,16 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         self._training_target = outputs
         self._new_training_data = True
 
+    def _format_exogenous(self, inputs):
+        exogenous_cols = list(self.hyperparams['exogenous_cols'])
+        
+        if (exogenous_cols == []):
+            return None
+        else:
+            exogenous = inputs.loc[:, exogenous_cols]
+            X = exogenous.to_numpy().astype(float)
+            return X 
+
     def fit(self, *, timeout: float = None, iterations: int = None) -> base.CallResult[None]:
         """From Kin's code:
         Fit the AutoARIMA estimator
@@ -523,15 +533,7 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         #print("inputs to kin's code:")
         #print(y)
 
-        exogenous_cols = list(self.hyperparams['exogenous_cols'])
-        print("exogenous_cols:")
-        print(exogenous_cols)
-        
-        if (exogenous_cols == []):
-            X = None
-        else:
-            X = self._training_exogenous.loc[:, exogenous_cols].to_numpy()
-
+        X = self._format_exogenous(self._training_exogenous)
         #print("X:")
         #print(X)
 
@@ -575,11 +577,7 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         print("exogenous_cols:")
         print(exogenous_cols)
         
-        if (exogenous_cols == []):
-            X = None
-        else:
-            X = inputs.loc[:, exogenous_cols].to_numpy()
-
+        X = self._format_exogenous(inputs)
         #print("X:")
         #print(X)
 
