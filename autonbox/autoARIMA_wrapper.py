@@ -20,7 +20,7 @@ Outputs = container.DataFrame
 
 class Params(params.Params):
     fitted: bool
-    new_training_data: typing.Any
+    new_training_data: bool
     autoARIMA: typing.Any
 
 class Hyperparams(hyperparams.Hyperparams):
@@ -32,7 +32,7 @@ class Hyperparams(hyperparams.Hyperparams):
         description = "Columns to use as exogenous variables to be passed in to AutoARIMA.fit() and AutoARIMA.predict().",
     )
 
-    #currently, setting this throws an error
+    #currently, setting this to anything other than default throws an error
     level = hyperparams.List(
         elements=hyperparams.Uniform(
             default=95,
@@ -65,7 +65,6 @@ class Hyperparams(hyperparams.Hyperparams):
         semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
         description="Order of first-differencing.  Either set manually, or have it be chosen automatically."
     )
-    #TODO: i think test only matters if d is None?  update hyperparams to reflect this
 
     D = hyperparams.Union(
         configuration=FrozenOrderedDict([
@@ -86,7 +85,6 @@ class Hyperparams(hyperparams.Hyperparams):
         semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
         description="Order of seasonal-differencing.  Either set manually, or have it be chosen automatically."
     )
-    #TODO: I think seasontest only matters if D is none?  update hyperparams to reflect this
 
     max_p = hyperparams.UniformInt(
         lower=1,
@@ -195,10 +193,11 @@ class Hyperparams(hyperparams.Hyperparams):
         description="information criterion used in model selection"
     )
 
+    #currently changing this causes autoARIMA to fail
     stepwise = hyperparams.UniformBool(
         default=True,
         semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
-        description="If True, will do stepwise selection (faster).  Otherwise, it searches over all models.  Non-stepwise selection can be very slow, especially for seasonal models."
+        description="If True, will do stepwise selection (faster).  Otherwise, it searches over all models.  Non-stepwise selection can be very slow, especially for seasonal models.  At the time of writing, setting stepwise to False causes AutoARIMA to fail."
     )
 
     nmodels=hyperparams.UniformInt(
@@ -253,7 +252,7 @@ class Hyperparams(hyperparams.Hyperparams):
         values=("kpss",),
         default="kpss",
         semantic_types=["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
-        description="Type of unit root test to use. See ndiffs for details."
+        description="Type of unit root test to use. See ndiffs for details.  As of this writing, this argument doesn't seem to do anything in statsforecast"
     )
 
     test_kwargs = hyperparams.Constant(
@@ -348,12 +347,25 @@ class Hyperparams(hyperparams.Hyperparams):
         description="Number of observations per unit of time. For example 24 for Hourly data."
     )
 
-
 class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params, Hyperparams]):
 
     """
-    #TODO: add docstring
+    A wrapper primitive of statsforecast.arima.AutoARIMA
+    Code Available at https://github.com/Nixtla/statsforecast/blob/main/statsforecast/arima.py#L2148-L2465
+
+    An AutoARIMA estimator.
+    Returns best ARIMA model according to either AIC, AICc or BIC value.
+    The function conducts a search over possible model within the order constraints provided.
+
+    Notes
+    -----
+    * This implementation is a mirror of Hyndman's forecast::auto.arima.
+
+    References
+    ----------
+    [1] https://github.com/robjhyndman/forecast
     """
+
     metadata = metadata_base.PrimitiveMetadata({
         "id": "434d4d25-dd61-4a32-a624-0f983995e189",
         "version": "0.1.0",
@@ -378,7 +390,7 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
     })
 
     def __init__(self, *, hyperparams: Hyperparams) -> None:
-        print("calling __init__")
+        #print("calling __init__")
 
         super().__init__(hyperparams=hyperparams)
 
@@ -389,7 +401,7 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         self._autoARIMA = None
 
     def get_params(self) -> Params:
-        print("calling get_params")
+        #print("calling get_params")
         return Params(
             fitted = self._fitted,
             new_training_data = self._new_training_data,
@@ -397,29 +409,36 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         )
 
     def set_params(self, *, params: Params) -> None:
-        print("calling set_params, params argument:")
-        print(params)
+        #print("calling set_params, params argument:")
+        #print(params)
         self._fitted = params['fitted']
         self._new_training_data = params['new_training_data']
         self._autoARIMA = params['autoARIMA']
 
     def set_training_data(self, *, inputs: Inputs, outputs: Outputs) -> None:
+        '''
         print("calling set_training_data")
         print("Inputs:")
         print(inputs)
         print("Outputs:")
         print(outputs)
+        '''
         
-        #inputs is optional exogenous data (can be None)
-        #TODO: add a hyperparam for is_exogenous?  or exogenous_cols?
+        '''
+        inputs is a dataframe that may be used as exogenous data,
+        if any columns are specified in the exogenous_cols hyperparameter.
+        outputs is a dataframe containing one column, the time series that we want to predict future values of
+        '''
 
-        #outputs is the time series that we want to predict future values of
         #TODO: check that outputs has one column
+        #TODO: check that inputs and outputs have same number of rows
+        #TODO: check at np.nan and np.inf are not present
 
         self._training_exogenous = inputs
         self._training_target = outputs
         self._new_training_data = True
 
+    #private method
     def _format_exogenous(self, inputs):
         exogenous_cols = list(self.hyperparams['exogenous_cols'])
         
@@ -431,19 +450,7 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
             return X 
 
     def fit(self, *, timeout: float = None, iterations: int = None) -> base.CallResult[None]:
-        """From Kin's code:
-        Fit the AutoARIMA estimator
-        Fit an AutoARIMA to a time series (numpy array) `y`
-        and optionally exogenous variables (numpy array) `X`.
-        Parameters
-        ----------
-        y: array-like of shape (n,)
-            One-dimensional numpy array of floats without `np.nan` or `np.inf`
-            values.
-        X: array-like of shape (n, n_x) optional (default=None)
-            An optional 2-d numpy array of exogenous variables (float).
-        """
-        print("calling fit")
+        #print("calling fit")
 
         #make hyperparams into local variables for convenience
         d = self.hyperparams['d']
@@ -480,9 +487,6 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         num_cores = self.hyperparams['num_cores']
         period = self.hyperparams['period']
 
-        #TODO: make sure hyperparams have correct values
-
-        #instantiate self._autoARIMA
         self._autoARIMA = AutoARIMA(
             d = d,
             D = D,
@@ -528,11 +532,12 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         #print("training inputs:")
         #print(self._training_inputs)
 
-        #Kin's code takes a 1-dimensional ndarray for y
+        #AutoARIMA takes a 1-dimensional ndarray for y
         y = self._training_target.to_numpy().flatten()
-        #print("inputs to kin's code:")
+        #print("y")
         #print(y)
 
+        #extract exogenous columns if there are any, and turn them into a 2d numpy array of floats.
         X = self._format_exogenous(self._training_exogenous)
         #print("X:")
         #print(X)
@@ -542,40 +547,21 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         return base.CallResult(None)
 
     def produce(self, *, inputs: Inputs, timeout: float = None, iterations: int = None) -> base.CallResult[Outputs]:
-        """From Kin's code:
-        Forecast future values using a fitted AutoArima.
-        Parameters
-        ----------
-        h: int
-            Number of periods for forecasting.
-        X: array-like of shape (h, n_x) optional (default=None)
-            Future exogenous variables.
-        level: int
-            Confidence level for prediction intervals.
-        Returns
-        -------
-        forecasts : pandas dataframe of shape (n, 1 + len(level))
-            The array of fitted values.
-            The confidence intervals for the forecasts are returned if
-            level is not None.
-        """
+        '''
         print("calling produce")
         print("Inputs:")
         print(inputs)
+        '''
 
-        #inputs is optional future exogenous data (can be None)
-        #TODO: check that future and past exogenous data match
+        #inputs is non-target columns that can optionally be used as future exogenous data.
 
         if not self._fitted:
             raise PrimitiveNotFittedError("Primitive not fitted.")
 
+        #predict for a number of periods corresponding to number of rows in inputs
         nrows = inputs.shape[0]
-        print("nrows:")
-        print(nrows)
-
-        exogenous_cols = list(self.hyperparams['exogenous_cols'])
-        print("exogenous_cols:")
-        print(exogenous_cols)
+        #print("nrows:")
+        #print(nrows)
         
         X = self._format_exogenous(inputs)
         #print("X:")
