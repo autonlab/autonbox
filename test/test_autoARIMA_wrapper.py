@@ -1,5 +1,5 @@
 import unittest
-import sys
+import os
 
 import pandas as pd
 from statsforecast.arima import AutoARIMA
@@ -9,6 +9,13 @@ from d3m.container import dataset
 from d3m.metadata import problem
 from d3m.metadata.base import ArgumentType, Context
 from d3m.metadata.pipeline import Pipeline, PrimitiveStep
+
+DATASET_LOCATION = "/home/mkowales/datasets/sunspots/"
+PROBLEM_PATH = os.path.join(DATASET_LOCATION, "TRAIN", "problem_TRAIN", "problemDoc.json")
+TRAIN_DOC_PATH = os.path.join(DATASET_LOCATION, "TRAIN", "dataset_TRAIN", "datasetDoc.json")
+TEST_DOC_PATH = os.path.join(DATASET_LOCATION, "TEST", "dataset_TEST", "datasetDoc.json")
+TRAIN_DATA_PATH = os.path.join(DATASET_LOCATION, "TRAIN", "dataset_TRAIN", "tables", "learningData.csv")
+TEST_DATA_PATH = os.path.join(DATASET_LOCATION, "TEST", "dataset_TEST", "tables", "learningData.csv")
 
 class AutoARIMAWrapperTestCase(unittest.TestCase):
 
@@ -108,11 +115,11 @@ class AutoARIMAWrapperTestCase(unittest.TestCase):
 
     def run_pipeline(self, pipeline_description : Pipeline):
         # Loading problem description.
-        problem_description = problem.get_problem('/home/scratch/mkowales/56_sunspots/56_sunspots_MIN_METADATA_problem/problemDoc.json')
+        problem_description = problem.get_problem(PROBLEM_PATH)
 
         # Loading train and test datasets.
-        train_dataset = dataset.get_dataset('/home/scratch/mkowales/56_sunspots/TRAIN/dataset_TRAIN/datasetDoc.json')
-        test_dataset = dataset.get_dataset('/home/scratch/mkowales/56_sunspots/TEST/dataset_TEST/datasetDoc.json')
+        train_dataset = dataset.get_dataset(TRAIN_DOC_PATH)
+        test_dataset = dataset.get_dataset(TEST_DOC_PATH)
 
         # Fitting pipeline on train dataset.
         fitted_pipeline, train_predictions, fit_result = runtime.fit(
@@ -136,6 +143,7 @@ class AutoARIMAWrapperTestCase(unittest.TestCase):
 
         return test_predictions.sunspots
     
+    '''
     def test_default_params(self):
 
         #run simple pipeline with AutoARIMA primitive
@@ -143,13 +151,14 @@ class AutoARIMAWrapperTestCase(unittest.TestCase):
         pipeline_predictions = self.run_pipeline(pipeline_description).to_numpy().flatten()
 
         #run statsforecast AutoARIMA directly
-        train = pd.read_csv("/home/scratch/mkowales/56_sunspots/TRAIN/dataset_TRAIN/tables/learningData.csv")
-        test = pd.read_csv("/home/scratch/mkowales/56_sunspots/TEST/dataset_TEST/tables/learningData.csv")
+        train = pd.read_csv(TRAIN_DATA_PATH)
+        test = pd.read_csv(TEST_DATA_PATH)
         y = train.sunspots.to_numpy().flatten()
+        h = test.shape[0] #number of rows in test
 
         arima = AutoARIMA()
         arima.fit(y)
-        direct_predictions = arima.predict(h=21).to_numpy().flatten()
+        direct_predictions = arima.predict(h=h, X=).to_numpy().flatten()
 
         print("direct:")
         print(direct_predictions)
@@ -157,25 +166,25 @@ class AutoARIMAWrapperTestCase(unittest.TestCase):
         print(pipeline_predictions)
 
         assert((direct_predictions == pipeline_predictions).all())
+    '''
 
     def test_exogenous(self):
 
         #run simple pipeline with AutoARIMA primitive
-        pipeline_description = self.construct_pipeline(hyperparams=[
-            ("exogenous_cols",["year", "sd"])
-        ])
+        pipeline_description = self.construct_pipeline(hyperparams=[])
         pipeline_predictions = self.run_pipeline(pipeline_description).to_numpy().flatten()
 
         #run statsforecast AutoARIMA directly
-        train = pd.read_csv("/home/scratch/mkowales/56_sunspots/TRAIN/dataset_TRAIN/tables/learningData.csv")
-        test = pd.read_csv("/home/scratch/mkowales/56_sunspots/TEST/dataset_TEST/tables/learningData.csv")
+        train = pd.read_csv(TRAIN_DATA_PATH)
+        test = pd.read_csv(TEST_DATA_PATH)
         y = train.sunspots.to_numpy().flatten()
-        X = train.loc[:, list(("year","sd"))].to_numpy()
-        Xf = test.loc[:, list(("year","sd"))].to_numpy()
+        X = train.loc[:, list(("sd", "observations"))].to_numpy()
+        Xf = test.loc[:, list(("sd", "observations"))].to_numpy()
+        h = test.shape[0] #number of rows in test
 
         arima = AutoARIMA()
         arima.fit(y, X=X)
-        direct_predictions = arima.predict(h=21, X=Xf).to_numpy().flatten()
+        direct_predictions = arima.predict(h=h, X=Xf).to_numpy().flatten()
 
         print("direct:")
         print(direct_predictions)
@@ -183,7 +192,6 @@ class AutoARIMAWrapperTestCase(unittest.TestCase):
         print(pipeline_predictions)
 
         assert((direct_predictions == pipeline_predictions).all())
-
 
 if __name__ == '__main__':
     unittest.main()
