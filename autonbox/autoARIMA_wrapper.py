@@ -25,6 +25,9 @@ class Params(params.Params):
 
 class Hyperparams(hyperparams.Hyperparams):
 
+    #removing "Exogenous cols" hyperparameter because it no longer applies--just assuming all columns are exogenous
+    #removing "level" hyperparam because it is not useful in a D3M pipeline
+    '''
     exogenous_cols = hyperparams.List(
         elements=hyperparams.Hyperparameter[str](""),
         default=[],
@@ -45,6 +48,7 @@ class Hyperparams(hyperparams.Hyperparams):
         semantic_types = ["https://metadata.datadrivendiscovery.org/types/ControlParameter"],
         description="An optional list of ints between 50 and 100 representing %% confidence levels for prediction intervals",
     )
+    '''
 
     d = hyperparams.Union(
         configuration=FrozenOrderedDict([
@@ -425,8 +429,7 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         '''
         
         '''
-        inputs is a dataframe that may be used as exogenous data,
-        if any columns are specified in the exogenous_cols hyperparameter.
+        inputs is a dataframe that will be used as exogenous data, excepting time columns
         outputs is a dataframe containing one column, the time series that we want to predict future values of
         '''
 
@@ -439,18 +442,47 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         self._new_training_data = True
 
     #private method
+    #determine columns to be used as exogenous data from column semantic types
     def _format_exogenous(self, inputs):
-        exogenous_cols = list(self.hyperparams['exogenous_cols'])
+        timestamp_cols = inputs.metadata.list_columns_with_semantic_types(
+            (
+                "https://metadata.datadrivendiscovery.org/types/Time",
+            )
+        )
+        #print("timestamp cols: " + str(timestamp_cols))
+        #TODO: raise error if there are multiple time cols or it is not a valid time series?
+
+        grouping_cols = inputs.metadata.list_columns_with_semantic_types(
+            (
+                "https://metadata.datadrivendiscovery.org/types/GroupingKey",
+                "https://metadata.datadrivendiscovery.org/types/SuggestedGroupingKey"
+            )
+        )
+        #print("grouping cols: " + str(grouping_cols))
+        #TODO: raise error if there are any grouping cols
+
+        attribute_cols = inputs.metadata.list_columns_with_semantic_types(
+            (
+                "https://metadata.datadrivendiscovery.org/types/Attribute",
+            )
+        )
+        #print("attribute cols: " + str(attribute_cols))
         
+        exogenous_cols = list(set(attribute_cols) - set(grouping_cols + timestamp_cols))
+        #print("exogneous_cols: " + str(exogenous_cols))
+
+        #return None
         if (exogenous_cols == []):
             return None
         else:
-            exogenous = inputs.loc[:, exogenous_cols]
+            exogenous = inputs.iloc[:, exogenous_cols]
+            #print("exogenous: ")
+            #print(exogenous)
             X = exogenous.to_numpy().astype(float)
             return X 
 
     def fit(self, *, timeout: float = None, iterations: int = None) -> base.CallResult[None]:
-        #print("calling fit")
+        #print("Fitting StatsForecast AutoARIMA")
 
         #make hyperparams into local variables for convenience
         d = self.hyperparams['d']
@@ -529,9 +561,6 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         if self._fitted == True and self._new_training_data == False:
             self.logger.warning("Model is already fit and training data has not changed.  Model will be refit from scratch, but expect nothing to change.")
 
-        #print("training inputs:")
-        #print(self._training_inputs)
-
         #AutoARIMA takes a 1-dimensional ndarray for y
         y = self._training_target.to_numpy().flatten()
         #print("y")
@@ -547,11 +576,9 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         return base.CallResult(None)
 
     def produce(self, *, inputs: Inputs, timeout: float = None, iterations: int = None) -> base.CallResult[Outputs]:
-        '''
-        print("calling produce")
-        print("Inputs:")
-        print(inputs)
-        '''
+        #print("calling produce")
+        #print("Inputs:")
+        #print(inputs)
 
         #inputs is non-target columns that can optionally be used as future exogenous data.
 
@@ -567,9 +594,9 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         #print("X:")
         #print(X)
 
-        predictions = self._autoARIMA.predict(h=nrows, X=X, level=self.hyperparams['level'])
-        print("predictions:")
-        print(predictions)
+        predictions = self._autoARIMA.predict(h=nrows, X=X, level=[])
+        #print("predictions:")
+        #print(predictions)
         output = container.DataFrame(predictions, generate_metadata=True)
         return base.CallResult(output)
 
