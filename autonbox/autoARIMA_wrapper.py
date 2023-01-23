@@ -1,9 +1,7 @@
-import os
 import typing
 from frozendict import FrozenOrderedDict
 
 from d3m import container
-from d3m import utils as d3m_utils
 from d3m.primitive_interfaces import base
 from d3m.primitive_interfaces.supervised_learning import SupervisedLearnerPrimitiveBase
 from d3m.metadata import base as metadata_base
@@ -12,6 +10,7 @@ from d3m.exceptions import MissingValueError, PrimitiveNotFittedError
 
 import autonbox
 from statsforecast.arima import AutoARIMA
+from __init__ import __version__
 
 __all__ = ('AutoARIMAWrapperPrimitive',)
 
@@ -387,7 +386,7 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         "installation": [{
             "type": metadata_base.PrimitiveInstallationType.PIP,
             "package": "autonbox",
-            "version": "0.2.4"
+            "version": __version__
         }]
     })
 
