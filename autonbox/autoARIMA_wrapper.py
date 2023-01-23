@@ -385,11 +385,9 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         },
         "keywords": ["ARIMA", "time series", "forecasting"],
         "installation": [{
-            'type': metadata_base.PrimitiveInstallationType.PIP,
-
-            'package_uri': 'git+https://github.com/autonlab/autonbox.git@{git_commit}#egg=autonbox'.format(
-                git_commit=d3m_utils.current_git_commit(os.path.dirname(__file__)),
-            ),
+            "type": metadata_base.PrimitiveInstallationType.PIP,
+            "package": ‘autonbox’,
+            "version": ‘0.2.1’
         }]
     })
 
