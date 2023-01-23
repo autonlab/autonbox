@@ -10,7 +10,7 @@ from d3m.exceptions import MissingValueError, PrimitiveNotFittedError
 
 import autonbox
 from statsforecast.arima import AutoARIMA
-from __init__ import __version__
+from autonbox import __version__
 
 __all__ = ('AutoARIMAWrapperPrimitive',)
 
