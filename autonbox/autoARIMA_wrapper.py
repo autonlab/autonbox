@@ -386,8 +386,8 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         "keywords": ["ARIMA", "time series", "forecasting"],
         "installation": [{
             "type": metadata_base.PrimitiveInstallationType.PIP,
-            "package": ‘autonbox’,
-            "version": ‘0.2.1’
+            "package": "autonbox",
+            "version": "0.2.4"
         }]
     })
 
