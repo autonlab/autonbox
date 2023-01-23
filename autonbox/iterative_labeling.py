@@ -66,12 +66,10 @@ class IterativeLabelingPrimitive(SupervisedLearnerPrimitiveBase[Input, Output, I
                 'uris': ['https://github.com/autonlab/autonbox'],
                 'contact': 'mailto:donghanw@cs.cmu.edu'
             },
-            'installation': [{
-                'type': metadata_base.PrimitiveInstallationType.PIP,
-
-                'package_uri': 'git+https://github.com/autonlab/autonbox.git@{git_commit}#egg=autonbox'.format(
-                    git_commit=d3m_utils.current_git_commit(os.path.dirname(__file__)),
-                ),
+            "installation": [{
+                "type": metadata_base.PrimitiveInstallationType.PIP,
+                "package": "autonbox",
+                "version": "0.2.4"
             }],
             'algorithm_types': [
                 metadata_base.PrimitiveAlgorithmType.ITERATIVE_LABELING,
