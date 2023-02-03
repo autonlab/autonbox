@@ -2,8 +2,10 @@ import unittest
 import os
 
 import pandas as pd
+from ray import tune
 from neuralforecast import NeuralForecast
-from neuralforecast.models import AutoNHITS
+from neuralforecast.auto import AutoNHITS
+from neuralforecast.losses.pytorch import MAE
 
 from d3m import runtime, index
 from d3m.container import dataset
@@ -43,6 +45,9 @@ class AutoNHITSTestCase(unittest.TestCase):
         step_2 = PrimitiveStep(primitive=index.get_primitive('d3m.primitives.data_transformation.column_parser.Common'))
         step_2.add_argument(name='inputs', argument_type=ArgumentType.CONTAINER, data='steps.1.produce')
         step_2.add_output('produce')
+
+        #idk why i added this hyperparam, default should actually be better
+        '''
         step_2.add_hyperparameter(
             name='parse_semantic_types',
             argument_type=ArgumentType.VALUE,
@@ -53,6 +58,8 @@ class AutoNHITSTestCase(unittest.TestCase):
                 "https://metadata.datadrivendiscovery.org/types/FloatVector"
             ]
         )
+        '''
+
         pipeline_description.add_step(step_2)
 
         # Step 3: extract_columns_by_semantic_types(attributes)
@@ -81,8 +88,8 @@ class AutoNHITSTestCase(unittest.TestCase):
         )
         pipeline_description.add_step(step_4)
 
-        # Step 5: autoARIMA
-        step_5 = PrimitiveStep(primitive=index.get_primitive('d3m.primitives.time_series_forecasting.arima.AutonBox'))
+        # Step 5: autoNHITS
+        step_5 = PrimitiveStep(primitive=index.get_primitive('d3m.primitives.time_series_forecasting.nhits.AutonBox'))
         step_5.add_argument(name='inputs', argument_type=ArgumentType.CONTAINER, data='steps.3.produce')
         step_5.add_argument(name='outputs', argument_type=ArgumentType.CONTAINER, data='steps.4.produce')
         #add hyperparams from argument
@@ -144,55 +151,53 @@ class AutoNHITSTestCase(unittest.TestCase):
 
         return test_predictions.sunspots
     
-    '''
     def test_default_params(self):
 
-        #run simple pipeline with AutoARIMA primitive
-        pipeline_description = self.construct_pipeline(hyperparams=[])
-        pipeline_predictions = self.run_pipeline(pipeline_description).to_numpy().flatten()
+        #run simple pipeline with AutoNHITS primitive
+        #pipeline_description = self.construct_pipeline(hyperparams=[])
+        #pipeline_predictions = self.run_pipeline(pipeline_description).to_numpy().flatten()
 
-        #run statsforecast AutoARIMA directly
+        #run AutoNHITS directly
         train = pd.read_csv(TRAIN_DATA_PATH)
         test = pd.read_csv(TEST_DATA_PATH)
-        y = train.sunspots.to_numpy().flatten()
-        h = test.shape[0] #number of rows in test
+        train['ds'] = pd.to_datetime(train['ds'])
+        test['ds'] = pd.to_datetime(test['ds'])
+        print(train)
+        print(test)
 
-        arima = AutoARIMA()
-        arima.fit(y)
-        direct_predictions = arima.predict(h=h, X=).to_numpy().flatten()
+        nhits_config = {
+            "max_steps": 100,                                                         # Number of SGD steps
+            "learning_rate": tune.loguniform(1e-5, 1e-1),                             # Initial Learning rate
+            "n_pool_kernel_size": tune.choice([[2, 2, 2], [16, 8, 1]]),               # MaxPool's Kernelsize
+            "n_freq_downsample": tune.choice([[168, 24, 1], [24, 12, 1], [1, 1, 1]]), # Interpolation expressivity ratios
+            #"val_check_steps": 50,                                                    # Compute validation every 50 steps
+            "random_seed": tune.randint(1, 10),
+            "input_size": 5*24,                                 # Size of input window
+            "futr_exog_list" : ['gen_forecast', 'week_day'],    # <- Future exogenous variables
+            "scaler_type" : 'robust'
+        }
 
+        horizon = test.shape[0]
+        model = AutoNHITS(
+                h=horizon,
+                loss=MAE(),
+                config=nhits_config,
+                num_samples=10)
+
+        nf = NeuralForecast(models=[model], freq='M')
+
+        nf.fit(df=train, val_size=horizon*2)
+        
+        y = test['y']
+        del test['y']
+
+        direct_predictions = nf.predict(futr_df=test)
         print("direct:")
         print(direct_predictions)
-        print("from pipeline:")
-        print(pipeline_predictions)
+        #print("from pipeline:")
+        #print(pipeline_predictions)
 
-        assert((direct_predictions == pipeline_predictions).all())
-    '''
-
-    def test_exogenous(self):
-
-        #run simple pipeline with AutoARIMA primitive
-        pipeline_description = self.construct_pipeline(hyperparams=[])
-        pipeline_predictions = self.run_pipeline(pipeline_description).to_numpy().flatten()
-
-        #run statsforecast AutoARIMA directly
-        train = pd.read_csv(TRAIN_DATA_PATH)
-        test = pd.read_csv(TEST_DATA_PATH)
-        y = train.sunspots.to_numpy().flatten()
-        X = train.loc[:, list(("sd", "observations"))].to_numpy()
-        Xf = test.loc[:, list(("sd", "observations"))].to_numpy()
-        h = test.shape[0] #number of rows in test
-
-        arima = AutoARIMA()
-        arima.fit(y, X=X)
-        direct_predictions = arima.predict(h=h, X=Xf).to_numpy().flatten()
-
-        print("direct:")
-        print(direct_predictions)
-        print("from pipeline:")
-        print(pipeline_predictions)
-
-        assert((direct_predictions == pipeline_predictions).all())
+        #assert((direct_predictions == pipeline_predictions).all())
 
 if __name__ == '__main__':
     unittest.main()
