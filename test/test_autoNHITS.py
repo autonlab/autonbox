@@ -19,6 +19,7 @@ TRAIN_DOC_PATH = os.path.join(DATASET_LOCATION, "TRAIN", "dataset_TRAIN", "datas
 TEST_DOC_PATH = os.path.join(DATASET_LOCATION, "TEST", "dataset_TEST", "datasetDoc.json")
 TRAIN_DATA_PATH = os.path.join(DATASET_LOCATION, "TRAIN", "dataset_TRAIN", "tables", "learningData.csv")
 TEST_DATA_PATH = os.path.join(DATASET_LOCATION, "TEST", "dataset_TEST", "tables", "learningData.csv")
+TARGET_NAME = 'y'
 
 class AutoNHITSTestCase(unittest.TestCase):
 
@@ -46,8 +47,11 @@ class AutoNHITSTestCase(unittest.TestCase):
         step_2.add_argument(name='inputs', argument_type=ArgumentType.CONTAINER, data='steps.1.produce')
         step_2.add_output('produce')
 
-        #idk why i added this hyperparam, default should actually be better
-        '''
+        #not adding this hyperparameter messes it up
+        #I have NO IDEA why
+        #looking at the documentation for this primitive,
+        #  using defaults should be better
+        #  if if you use defaults it messes up the values in a lot of the columns
         step_2.add_hyperparameter(
             name='parse_semantic_types',
             argument_type=ArgumentType.VALUE,
@@ -58,7 +62,6 @@ class AutoNHITSTestCase(unittest.TestCase):
                 "https://metadata.datadrivendiscovery.org/types/FloatVector"
             ]
         )
-        '''
 
         pipeline_description.add_step(step_2)
 
@@ -129,6 +132,9 @@ class AutoNHITSTestCase(unittest.TestCase):
         train_dataset = dataset.get_dataset(TRAIN_DOC_PATH)
         test_dataset = dataset.get_dataset(TEST_DOC_PATH)
 
+        print(train_dataset)
+        print(test_dataset)
+
         # Fitting pipeline on train dataset.
         fitted_pipeline, train_predictions, fit_result = runtime.fit(
             pipeline_description,
@@ -149,21 +155,22 @@ class AutoNHITSTestCase(unittest.TestCase):
         )
         produce_result.check_success()
 
-        return test_predictions.sunspots
+        return test_predictions
     
     def test_default_params(self):
 
         #run simple pipeline with AutoNHITS primitive
-        #pipeline_description = self.construct_pipeline(hyperparams=[])
-        #pipeline_predictions = self.run_pipeline(pipeline_description).to_numpy().flatten()
+        pipeline_description = self.construct_pipeline(hyperparams=[])
+        pipeline_predictions = self.run_pipeline(pipeline_description)
+        pipeline_predictions = pipeline_predictions[TARGET_NAME]
 
         #run AutoNHITS directly
         train = pd.read_csv(TRAIN_DATA_PATH)
         test = pd.read_csv(TEST_DATA_PATH)
         train['ds'] = pd.to_datetime(train['ds'])
         test['ds'] = pd.to_datetime(test['ds'])
-        print(train)
-        print(test)
+
+        h = int(test.shape[0]/2)
 
         nhits_config = {
             "max_steps": 100,                                                         # Number of SGD steps
@@ -171,31 +178,31 @@ class AutoNHITSTestCase(unittest.TestCase):
             "n_pool_kernel_size": tune.choice([[2, 2, 2], [16, 8, 1]]),               # MaxPool's Kernelsize
             "n_freq_downsample": tune.choice([[168, 24, 1], [24, 12, 1], [1, 1, 1]]), # Interpolation expressivity ratios
             #"val_check_steps": 50,                                                    # Compute validation every 50 steps
-            "random_seed": tune.randint(1, 10),
-            "input_size": 5*24,                                 # Size of input window
+            "random_seed": 1,
+            "input_size": h*5,                                 # Size of input window
             "futr_exog_list" : ['gen_forecast', 'week_day'],    # <- Future exogenous variables
             "scaler_type" : 'robust'
         }
-
-        horizon = test.shape[0]
+        
         model = AutoNHITS(
-                h=horizon,
+                h=h,
                 loss=MAE(),
                 config=nhits_config,
                 num_samples=10)
 
         nf = NeuralForecast(models=[model], freq='M')
 
-        nf.fit(df=train, val_size=horizon*2)
+        nf.fit(df=train, val_size=h*2)
         
         y = test['y']
         del test['y']
-
         direct_predictions = nf.predict(futr_df=test)
+        direct_predictions = direct_predictions['AutoNHITS']
+
         print("direct:")
         print(direct_predictions)
-        #print("from pipeline:")
-        #print(pipeline_predictions)
+        print("from pipeline:")
+        print(pipeline_predictions)
 
         #assert((direct_predictions == pipeline_predictions).all())
 
