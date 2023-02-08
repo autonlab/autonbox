@@ -13,13 +13,14 @@ from d3m.metadata import problem
 from d3m.metadata.base import ArgumentType, Context
 from d3m.metadata.pipeline import Pipeline, PrimitiveStep
 
-DATASET_LOCATION = "/home/mkowales/datasets/nfsample/d3m"
+DATASET_LOCATION = "/home/mkowales/datasets/sunspots/d3m"
+TARGET_NAME = 'sunspots'
+
 PROBLEM_PATH = os.path.join(DATASET_LOCATION, "TRAIN", "problem_TRAIN", "problemDoc.json")
 TRAIN_DOC_PATH = os.path.join(DATASET_LOCATION, "TRAIN", "dataset_TRAIN", "datasetDoc.json")
 TEST_DOC_PATH = os.path.join(DATASET_LOCATION, "TEST", "dataset_TEST", "datasetDoc.json")
 TRAIN_DATA_PATH = os.path.join(DATASET_LOCATION, "TRAIN", "dataset_TRAIN", "tables", "learningData.csv")
 TEST_DATA_PATH = os.path.join(DATASET_LOCATION, "TEST", "dataset_TEST", "tables", "learningData.csv")
-TARGET_NAME = 'y'
 
 class AutoNHITSTestCase(unittest.TestCase):
 
@@ -167,8 +168,17 @@ class AutoNHITSTestCase(unittest.TestCase):
         #run AutoNHITS directly
         train = pd.read_csv(TRAIN_DATA_PATH)
         test = pd.read_csv(TEST_DATA_PATH)
-        train['ds'] = pd.to_datetime(train['ds'])
-        test['ds'] = pd.to_datetime(test['ds'])
+        train['ds'] = pd.to_datetime(train['year'], format="%Y")
+        test['ds'] = pd.to_datetime(test['year'], format="%Y")
+        del train['year']
+        del test['year']
+
+        if 'unique_id' not in train.columns:
+            train['unique_id'] = ['a']*train.shape[0]
+            test['unique_id'] = ['a']*test.shape[0]
+
+        train.rename(columns={"sunspots":"y"})
+        test.rename(columns={"sunspots":"y"})
 
         h = int(test.shape[0]/2)
 
@@ -180,7 +190,7 @@ class AutoNHITSTestCase(unittest.TestCase):
             #"val_check_steps": 50,                                                    # Compute validation every 50 steps
             "random_seed": 1,
             "input_size": h*5,                                 # Size of input window
-            "futr_exog_list" : ['gen_forecast', 'week_day'],    # <- Future exogenous variables
+            "futr_exog_list" : [],    # <- Future exogenous variables
             "scaler_type" : 'robust'
         }
         
@@ -190,7 +200,7 @@ class AutoNHITSTestCase(unittest.TestCase):
                 config=nhits_config,
                 num_samples=10)
 
-        nf = NeuralForecast(models=[model], freq='M')
+        nf = NeuralForecast(models=[model], freq='AS')
 
         nf.fit(df=train, val_size=h*2)
         

@@ -34,9 +34,16 @@ Inputs = container.DataFrame
 Outputs = container.DataFrame
 
 class Params(params.Params):
+    has_training_data: bool
     new_training_data: bool
+
     training_target: typing.Any
     training_attributes: typing.Any
+    nf_train_data: typing.Any
+    target_name: str
+    exog_names: typing.List
+    ngroups: int
+
     fitted: bool
     nf: typing.Any              #NeuralForecast object containing model
 
@@ -71,30 +78,119 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
 
         super().__init__(hyperparams=hyperparams)
 
+        self._has_training_data = False
+        self._new_training_data = False
+
         self._training_target = None
         self._training_attributes = None
-        self._new_training_data = False
+        self._nf_train_data = None
+        self._target_name = None
+        self._exog_names = []
+        self._ngroups = 0
+
         self._fitted = False
         self._nf = None
 
     def get_params(self) -> Params:
+        #TODO: update
         print("calling get_params")
         return Params(
+            has_training_data = self._has_training_data,
             new_training_data = self._new_training_data,
             training_target = self._training_target,
             training_attributes = self._training_attributes,
+            nf_train_data = self._nf_train_data,
+            target_name = self._target_name,
+            exog_names = self._exog_names,
+            ngroups = self._ngroups,
             fitted = self._fitted,
             nf = self._nf
         )
 
     def set_params(self, *, params: Params) -> None:
+        #TODO: update
         print("calling set_params")
-        #print(params)
+        self._has_training_data = params['has_training_data']
         self._new_training_data = params['new_training_data']
+
         self._training_target = params['training_target']
         self._training_attributes = params['training_attributes']
+        self._nf_train_data = params['nf_train_data']
+        self._target_name = params['target_name']
+        self._exog_names = params['exog_names']
+        self._ngroups = params['ngroups']
+
         self._fitted = params['fitted']
         self._nf = params['nf']
+
+    #private method
+    def _format_data(self, attributes, target=None):
+        #transform data from d3m input format to neuralforcast ingest format
+        print("formatting data for neuralforecast")
+
+        #extract time column as series
+        time_col_indices = attributes.metadata.list_columns_with_semantic_types(
+            (
+                "https://metadata.datadrivendiscovery.org/types/Time",
+            )
+        )
+        print("timestamp cols: " + str(time_col_indices))
+        #TODO: make sure there's only 1 timestamp col
+        #TODO: make sure it's valid datetime
+        print("time col before conversion to datetime:")
+        time_col = attributes.iloc[:,time_col_indices[0]]
+        print(time_col)
+        time_col = pd.to_datetime(time_col)
+        print("time col after conversion to datetime:")
+        print(time_col)
+
+        #extract grouping column as series
+        group_col_indices = attributes.metadata.list_columns_with_semantic_types(
+            (
+                "https://metadata.datadrivendiscovery.org/types/GroupingKey",
+                "https://metadata.datadrivendiscovery.org/types/SuggestedGroupingKey"
+            )
+        )
+        print("grouping cols: " + str(group_col_indices))
+        #TODO: make sure theres <=1 grouping col
+        #TODO: make sure grouping col is valid
+        if len(group_col_indices) > 0:
+            group_col = attributes.iloc[:,group_col_indices[0]]
+        else:
+            #data has only 1 time series (no grouping col)
+            #however neuralforecast still requires a grouping col
+            #create a grouping col putting all rows in same group
+            group_col = ['a']*attributes.shape[0]
+        #TODO: ensure groups are all same length
+        self._ngroups = len(set(group_col))
+
+        #extract names of exogneous variable columns and save them
+        attribute_col_indices = attributes.metadata.list_columns_with_semantic_types(
+            (
+                "https://metadata.datadrivendiscovery.org/types/Attribute",
+            )
+        )
+        print("attribute cols: " + str(attribute_col_indices))
+        exog_col_inidices = list(set(attribute_col_indices) - set(group_col_indices + time_col_indices))
+        print("exogenous cols: " + str(exog_col_inidices))
+        exogenous_colnames = [list(attributes.columns)[i] for i in exog_col_inidices]
+        print("exogenous colnames: " + str(exogenous_colnames))
+        self._exog_names = exogenous_colnames
+
+        #construct dataframe formatted to be ingested by neuralforecast
+        nf_df = attributes[exogenous_colnames]  #exogenous cols retain name from dataset
+        #TODO: check that no exogenous cols are named "ds", "y" or "unique_id"
+        nf_df['ds'] = time_col
+        nf_df['unique_id'] = group_col
+
+        #add target col if we're given one and save target colname
+        if target is not None:
+            target_colname = target.columns[0]
+            nf_df['y'] = target[target_colname]
+            self._target_name = target_colname
+
+        return(nf_df)
+
 
     def set_training_data(self, *, inputs: Inputs, outputs: Outputs) -> None:
         print("calling set_training_data")
@@ -110,61 +206,18 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
         #TODO: check that inputs and outputs have same number of rows
         #TODO: check at np.nan and np.inf are not present
 
+        if self._has_training_data:
+            self._new_training_data = True
+
+        self._has_training_data = True
+
+        #save data in d3m format
         self._training_attributes = inputs
         self._training_target = outputs
-        self._new_training_data = True
 
-    #private method
-    def _format_data(self, attributes, target=None):
-        print("formatting data for neuralforecast")
-
-        timestamp_cols = attributes.metadata.list_columns_with_semantic_types(
-            (
-                "https://metadata.datadrivendiscovery.org/types/Time",
-            )
-        )
-        print("timestamp cols: " + str(timestamp_cols))
-        #TODO: make sure there's only 1 timestamp col
-        #TODO: make sure it's valid datetime
-        time_colname = attributes.columns[timestamp_cols[0]]
-
-        grouping_cols = attributes.metadata.list_columns_with_semantic_types(
-            (
-                "https://metadata.datadrivendiscovery.org/types/GroupingKey",
-                "https://metadata.datadrivendiscovery.org/types/SuggestedGroupingKey"
-            )
-        )
-        print("grouping cols: " + str(grouping_cols))
-        #TODO: make sure theres <=1 grouping col
-        #TODO: deal with no grouping cols scenario
-        #TODO: make sure grouping col is valid
-        grouping_colname = attributes.columns[grouping_cols[0]]
-
-        attribute_cols = attributes.metadata.list_columns_with_semantic_types(
-            (
-                "https://metadata.datadrivendiscovery.org/types/Attribute",
-            )
-        )
-        print("attribute cols: " + str(attribute_cols))
-    
-        exogenous_cols = list(set(attribute_cols) - set(grouping_cols + timestamp_cols))
-        print("exogenous cols: " + str(exogenous_cols))
-        exogenous_colnames = [list(attributes.columns)[i] for i in exogenous_cols]
-        print("exogenous colnames: " + str(exogenous_colnames))
-
-        nf_df = attributes.rename(columns={
-            grouping_colname : 'unique_id',
-            time_colname : 'ds'})
-
-        if target is not None:
-            target_colname = target.columns[0]
-            nf_df['y'] = target[target_colname]
-        else:
-            target_colname = "n/a"
-
-        nf_df['ds'] = pd.to_datetime(nf_df['ds'])
-
-        return((nf_df, time_colname, grouping_colname, exogenous_colnames, target_colname))
+        #save data in neuralforecast format
+        self._nf_train_data = self._format_data(inputs, outputs)
+        #this method also sets self._target_name and self._exog_names
 
     def fit(self, *, timeout: float = None, iterations: int = None) -> base.CallResult[None]:
         #in order to fit NHITS, need to know forecasting horizon
@@ -172,6 +225,37 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
         print("calling fit, do nothing")
         return base.CallResult(None)
 
+    #private method
+    def _fit_nf(self, h):
+        print("Fitting NeuralForecast AutoNHITS")
+
+        print("train:")
+        print(self._nf_train_data)
+
+        nhits_config = {
+            "max_steps": 100,                                                         # Number of SGD steps
+            "learning_rate": tune.loguniform(1e-5, 1e-1),                             # Initial Learning rate
+            "n_pool_kernel_size": tune.choice([[2, 2, 2], [16, 8, 1]]),               # MaxPool's Kernelsize
+            "n_freq_downsample": tune.choice([[168, 24, 1], [24, 12, 1], [1, 1, 1]]), # Interpolation expressivity ratios                                            # Compute validation every 50 steps
+            "random_seed": 1,
+            "input_size": h*5,                                 # Size of input window
+            "futr_exog_list" : self._exog_names,    # <- Future exogenous variables
+            "scaler_type" : 'robust'
+        }
+
+        model = AutoNHITS(
+                h=h,
+                loss=MAE(),
+                config=nhits_config,
+                num_samples=10)
+        
+        inferred_freq = pd.infer_freq(self._nf_train_data['ds'])
+        print("inferred freq: " + inferred_freq)
+        self._nf = NeuralForecast(models=[model], freq=inferred_freq)
+
+        self._nf.fit(df=self._nf_train_data, val_size=h*2)
+
+    
     def produce(self, *, inputs: Inputs, timeout: float = None, iterations: int = None) -> base.CallResult[Outputs]:
         print("calling produce")
         print("Inputs:")
@@ -188,75 +272,49 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
             #it doesn't seem like training predictions are really used despite D3M wanting them
             #and they dont really make sense for time series forecasting
             #dataframe that is the same length as expected output
-            #contains one column called 'y' which is all 0's
+            #contains one column with the target's name which is all 0's
             print("returning dummy data for in-sample predictions")
             nrows = inputs.shape[0]
-            predictions = pd.DataFrame({'y':[0]*nrows})
+            predictions = pd.DataFrame({self._target_name:[0]*nrows})
 
         else:
-            if not self._fitted:
-                print("Fitting NeuralForecast AutoNHITS")
-
+            #fit if we have not fit the model yet
+            #refit if there is new training data
+            if not self._fitted or self._new_training_data:
                 #predict for a number of periods corresponding to number of rows in inputs
-                h = int(inputs.shape[0]/2)
-                print("h:")
-                print(h)
+                h = int(inputs.shape[0]/self._ngroups)
+                print("h:" + str(h))
 
-                #turn training data into a format that neuralforecast likes
-                (train, timename, groupname, exognames, targetname) = self._format_data(
-                    self._training_attributes,
-                    self._training_target)
-                print("train:")
-                print(train)
+                self._fit_nf(h)
 
-                nhits_config = {
-                    "max_steps": 100,                                                         # Number of SGD steps
-                    "learning_rate": tune.loguniform(1e-5, 1e-1),                             # Initial Learning rate
-                    "n_pool_kernel_size": tune.choice([[2, 2, 2], [16, 8, 1]]),               # MaxPool's Kernelsize
-                    "n_freq_downsample": tune.choice([[168, 24, 1], [24, 12, 1], [1, 1, 1]]), # Interpolation expressivity ratios                                            # Compute validation every 50 steps
-                    "random_seed": 1,
-                    "input_size": h*5,                                 # Size of input window
-                    "futr_exog_list" : exognames,    # <- Future exogenous variables
-                    "scaler_type" : 'robust'
-                }
-
-                model = AutoNHITS(
-                        h=h,
-                        loss=MAE(),
-                        config=nhits_config,
-                        num_samples=10)
-
-                self._nf = NeuralForecast(models=[model], freq='M')
-
-                self._nf.fit(df=train, val_size=h*2)
                 self._fitted = True
-                true_targetname = targetname
+                self._new_training_data = False #we have fit on current train data, no longer new
 
             #TODO: check that self._nf not None
-            (future, timename, groupname, exognames, targetname) = self._format_data(inputs)
+            future = self._format_data(inputs)
             print("future:")
             print(future)
 
             predictions = self._nf.predict(futr_df=future)
-
-            #grouping column will be returned as the index
-            #change it to a normal column named index
-            predictions.reset_index(inplace=True)
-            print("predictions:")
+            print("raw predictions:")
             print(predictions)
 
+            #grouping column will be returned as the index
+            #change it to a normal column
+            predictions.reset_index(inplace=True)
+            
+            #drop grouping and time columns, d3m doesnt like them in outputs
             predictions = predictions.drop(['unique_id', 'ds'], axis=1)
-            #change column names back to what they were originally
+
+            #rename output column to name of original target column
             predictions.rename(
                 columns={
-                    #'index':groupname,
-                    #'ds':timename,
-                    'AutoNHITS':true_targetname
+                    'AutoNHITS':self._target_name
                 },
                 inplace=True
             )
 
-            print("predictions:")
+            print("predictions to return:")
             print(predictions)
 
         #need to put predictions in right format for d3m
