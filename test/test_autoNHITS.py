@@ -13,15 +13,6 @@ from d3m.metadata import problem
 from d3m.metadata.base import ArgumentType, Context
 from d3m.metadata.pipeline import Pipeline, PrimitiveStep
 
-DATASET_LOCATION = "/home/mkowales/datasets/sunspots/d3m"
-TARGET_NAME = 'sunspots'
-
-PROBLEM_PATH = os.path.join(DATASET_LOCATION, "TRAIN", "problem_TRAIN", "problemDoc.json")
-TRAIN_DOC_PATH = os.path.join(DATASET_LOCATION, "TRAIN", "dataset_TRAIN", "datasetDoc.json")
-TEST_DOC_PATH = os.path.join(DATASET_LOCATION, "TEST", "dataset_TEST", "datasetDoc.json")
-TRAIN_DATA_PATH = os.path.join(DATASET_LOCATION, "TRAIN", "dataset_TRAIN", "tables", "learningData.csv")
-TEST_DATA_PATH = os.path.join(DATASET_LOCATION, "TEST", "dataset_TEST", "tables", "learningData.csv")
-
 class AutoNHITSTestCase(unittest.TestCase):
 
     #hyperparams argument is a list of (name, data) tuples
@@ -125,13 +116,17 @@ class AutoNHITSTestCase(unittest.TestCase):
 
         return pipeline_description
 
-    def run_pipeline(self, pipeline_description : Pipeline):
+    def run_pipeline(self, pipeline_description : Pipeline, dataset_location : str):
+        problem_path = os.path.join(dataset_location, "TRAIN", "problem_TRAIN", "problemDoc.json")
+        train_doc_path = os.path.join(dataset_location, "TRAIN", "dataset_TRAIN", "datasetDoc.json")
+        test_doc_path = os.path.join(dataset_location, "TEST", "dataset_TEST", "datasetDoc.json")
+
         # Loading problem description.
-        problem_description = problem.get_problem(PROBLEM_PATH)
+        problem_description = problem.get_problem(problem_path)
 
         # Loading train and test datasets.
-        train_dataset = dataset.get_dataset(TRAIN_DOC_PATH)
-        test_dataset = dataset.get_dataset(TEST_DOC_PATH)
+        train_dataset = dataset.get_dataset(train_doc_path)
+        test_dataset = dataset.get_dataset(test_doc_path)
 
         print(train_dataset)
         print(test_dataset)
@@ -158,29 +153,9 @@ class AutoNHITSTestCase(unittest.TestCase):
 
         return test_predictions
     
-    def test_default_params(self):
-
-        #run simple pipeline with AutoNHITS primitive
-        pipeline_description = self.construct_pipeline(hyperparams=[])
-        pipeline_predictions = self.run_pipeline(pipeline_description)
-        pipeline_predictions = pipeline_predictions[TARGET_NAME]
-
+    def run_direct(self, train, test, h, freq):
         #run AutoNHITS directly
-        train = pd.read_csv(TRAIN_DATA_PATH)
-        test = pd.read_csv(TEST_DATA_PATH)
-        train['ds'] = pd.to_datetime(train['year'], format="%Y")
-        test['ds'] = pd.to_datetime(test['year'], format="%Y")
-        del train['year']
-        del test['year']
-
-        if 'unique_id' not in train.columns:
-            train['unique_id'] = ['a']*train.shape[0]
-            test['unique_id'] = ['a']*test.shape[0]
-
-        train.rename(columns={"sunspots":"y"})
-        test.rename(columns={"sunspots":"y"})
-
-        h = int(test.shape[0]/2)
+        future_exog = list(set(train.columns) - set(['ds', 'unique_id', 'y']))
 
         nhits_config = {
             "max_steps": 100,                                                         # Number of SGD steps
@@ -190,7 +165,7 @@ class AutoNHITSTestCase(unittest.TestCase):
             #"val_check_steps": 50,                                                    # Compute validation every 50 steps
             "random_seed": 1,
             "input_size": h*5,                                 # Size of input window
-            "futr_exog_list" : [],    # <- Future exogenous variables
+            "futr_exog_list" : future_exog,    # <- Future exogenous variables
             "scaler_type" : 'robust'
         }
         
@@ -200,21 +175,92 @@ class AutoNHITSTestCase(unittest.TestCase):
                 config=nhits_config,
                 num_samples=10)
 
-        nf = NeuralForecast(models=[model], freq='AS')
+        nf = NeuralForecast(models=[model], freq=freq)
 
         nf.fit(df=train, val_size=h*2)
         
         y = test['y']
         del test['y']
         direct_predictions = nf.predict(futr_df=test)
-        direct_predictions = direct_predictions['AutoNHITS']
+        return direct_predictions['AutoNHITS']
+
+    def test_nfsample(self):
+        print("testing nf sample dataset")
+        dataset_location = "/home/mkowales/datasets/nfsample/d3m"
+
+        train_data_path = os.path.join(dataset_location, "TRAIN", "dataset_TRAIN", "tables", "learningData.csv")
+        test_data_path = os.path.join(dataset_location, "TEST", "dataset_TEST", "tables", "learningData.csv")
+
+        target_name = 'y'
+
+        train = pd.read_csv(train_data_path)
+        test = pd.read_csv(test_data_path)
+        train['ds'] = pd.to_datetime(train['ds'])
+        test['ds'] = pd.to_datetime(test['ds'])
+
+        h = int(test.shape[0]/2)
+
+        freq = 'M'
+
+        #----------
+        #run simple pipeline with AutoNHITS primitive
+        pipeline_description = self.construct_pipeline(hyperparams=[])
+        pipeline_predictions = self.run_pipeline(pipeline_description, dataset_location)
+        pipeline_predictions = pipeline_predictions[target_name]
+
+        #run AutoNHITS directly
+        direct_predictions = self.run_direct(train, test, h, freq)
 
         print("direct:")
         print(direct_predictions)
         print("from pipeline:")
         print(pipeline_predictions)
 
-        #assert((direct_predictions == pipeline_predictions).all())
+        assert((direct_predictions == pipeline_predictions).all())
 
+    '''
+    def test_sunspots(self):
+
+        dataset_location = "/home/mkowales/datasets/sunspots/d3m"
+
+        train_data_path = os.path.join(dataset_location, "TRAIN", "dataset_TRAIN", "tables", "learningData.csv")
+        test_data_path = os.path.join(dataset_location, "TEST", "dataset_TEST", "tables", "learningData.csv")
+
+        target_name = 'sunspots'
+
+        train = pd.read_csv(train_data_path)
+        test = pd.read_csv(test_data_path)
+        train['ds'] = pd.to_datetime(train['year'], format="%Y")
+        test['ds'] = pd.to_datetime(test['year'], format="%Y")
+        del train['year']
+        del test['year']
+
+        train['unique_id'] = ['a']*train.shape[0]
+        test['unique_id'] = ['a']*test.shape[0]
+
+        train.rename(columns={"sunspots":"y"})
+        test.rename(columns={"sunspots":"y"})
+
+        h = int(test.shape[0])
+
+        freq = 'AS'
+
+        #----------
+        #run simple pipeline with AutoNHITS primitive
+        pipeline_description = self.construct_pipeline(hyperparams=[])
+        pipeline_predictions = self.run_pipeline(pipeline_description, dataset_location)
+        pipeline_predictions = pipeline_predictions[target_name]
+
+        #run AutoNHITS directly
+        direct_predictions = self.run_direct(train, test, h, freq)
+
+        print("direct:")
+        print(direct_predictions)
+        print("from pipeline:")
+        print(pipeline_predictions)
+
+        assert((direct_predictions == pipeline_predictions).all())
+    '''
+    
 if __name__ == '__main__':
     unittest.main()
