@@ -225,6 +225,17 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
         print("calling fit, do nothing")
         return base.CallResult(None)
 
+    def _infer_freq(self):
+        #infer frequency of data
+        first_id = self._nf_train_data['unique_id'][0]
+        first_group = self._nf_train_data.loc[self._nf_train_data['unique_id'] == first_id]
+        inferred_freq = pd.infer_freq(first_group['ds'])
+        if inferred_freq is None:
+            print("pandas unable to infer frequency")
+            inferred_freq = 'M'
+            #TODO: either raise error or handle this in an intelligent way
+        print("inferred freq: " + inferred_freq)
+    
     #private method
     def _fit_nf(self, h):
         print("Fitting NeuralForecast AutoNHITS")
@@ -249,9 +260,7 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
                 config=nhits_config,
                 num_samples=10)
         
-        inferred_freq = pd.infer_freq(self._nf_train_data['ds'])
-        print("inferred freq: " + inferred_freq)
-        self._nf = NeuralForecast(models=[model], freq=inferred_freq)
+        self._nf = NeuralForecast(models=[model], freq=self._infer_freq())
 
         self._nf.fit(df=self._nf_train_data, val_size=h*2)
 
