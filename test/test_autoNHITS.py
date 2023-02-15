@@ -1,9 +1,12 @@
 import unittest
 import os
 
+import numpy as np
 import pandas as pd
 from ray import tune
-from neuralforecast import NeuralForecast
+from ray.tune.search.hyperopt import HyperOptSearch
+#from neuralforecast import NeuralForecast
+from neuralforecast.tsdataset import TimeSeriesDataset
 from neuralforecast.auto import AutoNHITS
 from neuralforecast.losses.pytorch import MAE
 
@@ -153,36 +156,99 @@ class AutoNHITSTestCase(unittest.TestCase):
 
         return test_predictions
     
-    def run_direct(self, train, test, h, freq):
+    def run_direct(self, train, test, h):
         #run AutoNHITS directly
         future_exog = list(set(train.columns) - set(['ds', 'unique_id', 'y']))
+        
+        print("Fitting NeuralForecast AutoNHITS (direct)")
+        print("train:")
+        print(train)
+        print("h:" + str(h))
+        print("future exog: " + str(future_exog))
 
         nhits_config = {
-            "max_steps": 100,                                                         # Number of SGD steps
-            "learning_rate": tune.loguniform(1e-5, 1e-1),                             # Initial Learning rate
-            "n_pool_kernel_size": tune.choice([[2, 2, 2], [16, 8, 1]]),               # MaxPool's Kernelsize
-            "n_freq_downsample": tune.choice([[168, 24, 1], [24, 12, 1], [1, 1, 1]]), # Interpolation expressivity ratios
-            #"val_check_steps": 50,                                                    # Compute validation every 50 steps
-            "random_seed": 1,
-            "input_size": h*5,                                 # Size of input window
-            "futr_exog_list" : future_exog,    # <- Future exogenous variables
-            "scaler_type" : 'robust'
+            "input_size": 3*h,
+            "n_pool_kernel_size": tune.choice(
+                [3 * [1], 3 * [2], 3 * [4], [8, 4, 1], [16, 8, 1]]
+            ),
+            "n_freq_downsample": tune.choice(
+                [
+                    [168, 24, 1],
+                    [24, 12, 1],
+                    [180, 60, 1],
+                    [60, 8, 1],
+                    [40, 20, 1],
+                    [1, 1, 1],
+                ]
+            ),
+            "learning_rate": tune.loguniform(1e-4, 1e-1),
+            "scaler_type" : 'robust',
+            "max_steps": 100,  #TODO: change to 1000 after testing
+            "batch_size": tune.choice([32, 64, 128, 256]),
+            "windows_batch_size": tune.choice([128, 256, 512, 1024]),                                                                       # Initial Learning rate
+            "random_seed": 1,                               
+            "futr_exog_list" : future_exog
         }
         
         model = AutoNHITS(
                 h=h,
                 loss=MAE(),
                 config=nhits_config,
+                search_alg=HyperOptSearch(),
                 num_samples=10)
 
-        nf = NeuralForecast(models=[model], freq=freq)
+        train, uids, last_dates, ds = TimeSeriesDataset.from_df(df=train)
+        model.fit(train, val_size=h*2)
 
-        nf.fit(df=train, val_size=h*2)
-        
         y = test['y']
         del test['y']
-        direct_predictions = nf.predict(futr_df=test)
-        return direct_predictions['AutoNHITS']
+
+        print("future:")
+        print(test)
+        dataset = TimeSeriesDataset.update_dataset(
+            dataset=train, future_df=test
+        )
+
+        model.set_test_size(h)  # To predict h steps ahead
+        model_fcsts = model.predict(dataset=dataset)
+        #print("model_fcsts:")
+        #print(model_fcsts)
+        return(pd.DataFrame({"y": list(model_fcsts.flatten())}))
+        #----------------------------------
+        '''
+        if issubclass(last_dates.dtype.type, np.integer):
+            last_date_f = lambda x: np.arange(
+            	x + 1, x + 1 + h, dtype=last_dates.dtype
+        	)
+        else:
+            last_date_f = lambda x: pd.date_range(
+                x + self.freq, periods=h, freq=self.freq
+            )
+
+        if len(np.unique(last_dates)) == 1:
+            dates = np.tile(last_date_f(last_dates[0]), len(train))
+        else:
+            dates = np.hstack([last_date_f(last_date) for last_date in last_dates])
+        
+        idx = pd.Index(np.repeat(uids, h), name="unique_id")
+        fcsts_df  = pd.DataFrame({"ds": dates}, index=idx)
+
+        
+
+        col_idx = 0
+        fcsts = np.full((h * len(uids), 1), fill_value=np.nan)
+        
+
+        # Append predictions in memory placeholder
+        output_length = len(model.loss.output_names)
+        fcsts[:, col_idx : col_idx + output_length] = model_fcsts
+        col_idx += output_length
+
+        # Declare predictions pd.DataFrame
+        fcsts = pd.DataFrame.from_records(fcsts, columns=cols, index=fcsts_df.index)
+        fcsts_df = pd.concat([fcsts_df, fcsts], axis=1)
+        '''
+        #----------------------------------
 
     def test_nfsample(self):
         print("testing nf sample dataset")
@@ -198,25 +264,31 @@ class AutoNHITSTestCase(unittest.TestCase):
         train['ds'] = pd.to_datetime(train['ds'])
         test['ds'] = pd.to_datetime(test['ds'])
 
+        del train['d3mIndex']
+        del test['d3mIndex']
+
         h = int(test.shape[0]/2)
 
-        freq = 'M'
+        freq = 'H'
 
         #----------
+
+        #run AutoNHITS directly
+        direct_predictions = self.run_direct(train, test, h)
+
         #run simple pipeline with AutoNHITS primitive
         pipeline_description = self.construct_pipeline(hyperparams=[])
         pipeline_predictions = self.run_pipeline(pipeline_description, dataset_location)
         pipeline_predictions = pipeline_predictions[target_name]
 
-        #run AutoNHITS directly
-        direct_predictions = self.run_direct(train, test, h, freq)
-
         print("direct:")
         print(direct_predictions)
+        print(type(direct_predictions))
         print("from pipeline:")
         print(pipeline_predictions)
+        print(type(pipeline_predictions))
 
-        assert((direct_predictions == pipeline_predictions).all())
+        assert((direct_predictions['y'] == pipeline_predictions).all())
 
     '''
     def test_sunspots(self):
