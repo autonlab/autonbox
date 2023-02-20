@@ -48,7 +48,8 @@ setup(
         'torch>=1.4.0',
         'torchvision>=0.5.0',
         'statsforecast',
-        'neuralforecast'
+        'neuralforecast>=1.3.0',
+        'transformers>=4.6.0'
     ],
     entry_points=read_entry_points(),
     url='https://github.com/autonlab/autonbox',
