@@ -186,7 +186,7 @@ class AutoNHITSTestCase(unittest.TestCase):
             "max_steps": 100,  #TODO: change to 1000 after testing
             "batch_size": tune.choice([32, 64, 128, 256]),
             "windows_batch_size": tune.choice([128, 256, 512, 1024]),                                                                       # Initial Learning rate
-            "random_seed": 1,                               
+            "random_seed": 1,
             "futr_exog_list" : future_exog
         }
         

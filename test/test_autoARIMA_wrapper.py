@@ -10,7 +10,8 @@ from d3m.metadata import problem
 from d3m.metadata.base import ArgumentType, Context
 from d3m.metadata.pipeline import Pipeline, PrimitiveStep
 
-DATASET_LOCATION = "/home/mkowales/datasets/sunspots/"
+DATASET_LOCATION = "/home/mkowales/datasets/nfsample/d3m"
+#DATASET_LOCATION = "/home/mkowales/datasets/sunspots/d3m"
 PROBLEM_PATH = os.path.join(DATASET_LOCATION, "TRAIN", "problem_TRAIN", "problemDoc.json")
 TRAIN_DOC_PATH = os.path.join(DATASET_LOCATION, "TRAIN", "dataset_TRAIN", "datasetDoc.json")
 TEST_DOC_PATH = os.path.join(DATASET_LOCATION, "TEST", "dataset_TEST", "datasetDoc.json")

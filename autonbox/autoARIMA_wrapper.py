@@ -13,6 +13,8 @@ from statsforecast.arima import AutoARIMA
 from autonbox import __version__
 
 __all__ = ('AutoARIMAWrapperPrimitive',)
+#TODO: handle grouping
+#TODO: use proper statsforecast formatting?
 
 Inputs = container.DataFrame
 Outputs = container.DataFrame
@@ -402,7 +404,7 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         self._autoARIMA = None
 
     def get_params(self) -> Params:
-        #print("calling get_params")
+        print("calling get_params")
         return Params(
             fitted = self._fitted,
             new_training_data = self._new_training_data,
@@ -410,20 +412,18 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         )
 
     def set_params(self, *, params: Params) -> None:
-        #print("calling set_params, params argument:")
-        #print(params)
+        print("calling set_params, params argument:")
+        print(params)
         self._fitted = params['fitted']
         self._new_training_data = params['new_training_data']
         self._autoARIMA = params['autoARIMA']
 
     def set_training_data(self, *, inputs: Inputs, outputs: Outputs) -> None:
-        '''
         print("calling set_training_data")
         print("Inputs:")
         print(inputs)
         print("Outputs:")
         print(outputs)
-        '''
         
         '''
         inputs is a dataframe that will be used as exogenous data, excepting time columns
@@ -479,7 +479,7 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
             return X 
 
     def fit(self, *, timeout: float = None, iterations: int = None) -> base.CallResult[None]:
-        #print("Fitting StatsForecast AutoARIMA")
+        print("Fitting StatsForecast AutoARIMA")
 
         #make hyperparams into local variables for convenience
         d = self.hyperparams['d']
@@ -573,9 +573,9 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         return base.CallResult(None)
 
     def produce(self, *, inputs: Inputs, timeout: float = None, iterations: int = None) -> base.CallResult[Outputs]:
-        #print("calling produce")
-        #print("Inputs:")
-        #print(inputs)
+        print("calling produce")
+        print("Inputs:")
+        print(inputs)
 
         #inputs is non-target columns that can optionally be used as future exogenous data.
 
@@ -584,16 +584,16 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
 
         #predict for a number of periods corresponding to number of rows in inputs
         nrows = inputs.shape[0]
-        #print("nrows:")
-        #print(nrows)
+        print("nrows:")
+        print(nrows)
         
         X = self._format_exogenous(inputs)
-        #print("X:")
-        #print(X)
+        print("X:")
+        print(X)
 
         predictions = self._autoARIMA.predict(h=nrows, X=X, level=[])
-        #print("predictions:")
-        #print(predictions)
+        print("predictions:")
+        print(predictions)
         output = container.DataFrame(predictions, generate_metadata=True)
         return base.CallResult(output)
 
