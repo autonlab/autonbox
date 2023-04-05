@@ -24,6 +24,145 @@ class AutoNHITSTestCase(unittest.TestCase):
         pipeline_description = Pipeline()
         pipeline_description.add_input(name='inputs')
 
+        # Step 0: denormalize
+        step_0 = PrimitiveStep(primitive=index.get_primitive('d3m.primitives.data_transformation.denormalize.Common'))
+        step_0.add_argument(name='inputs', argument_type=ArgumentType.CONTAINER, data='inputs.0')
+        step_0.add_output('produce')
+        pipeline_description.add_step(step_0)
+
+        # Step 1: dataset_to_dataframe
+        step_1 = PrimitiveStep(primitive=index.get_primitive('d3m.primitives.data_transformation.dataset_to_dataframe.Common'))
+        step_1.add_argument(name='inputs', argument_type=ArgumentType.CONTAINER, data='steps.0.produce')
+        step_1.add_output('produce')
+        pipeline_description.add_step(step_1)
+
+        # Step 2: profiler
+        # Automatically determine semantic types of columns
+        step_2 = PrimitiveStep(primitive=index.get_primitive('d3m.primitives.schema_discovery.profiler.Common'))
+        step_2.add_argument(name='inputs', argument_type=ArgumentType.CONTAINER, data='steps.1.produce')
+        step_2.add_output('produce')
+        pipeline_description.add_step(step_2)
+
+        # Step 3: column parser
+        # automatically determine data types of colums (eg float, boolean, integer)
+        step_3 = PrimitiveStep(primitive=index.get_primitive('d3m.primitives.data_transformation.column_parser.Common'))
+        step_3.add_argument(name='inputs', argument_type=ArgumentType.CONTAINER, data='steps.2.produce')
+        step_3.add_output('produce')
+        #not adding this hyperparameter messes it up
+        #I have NO IDEA why
+        #looking at the documentation for this primitive,
+        #  using defaults should be better
+        #  if if you use defaults it messes up the values in a lot of the columns
+        step_3.add_hyperparameter(
+            name='parse_semantic_types',
+            argument_type=ArgumentType.VALUE,
+            data=[
+                "http://schema.org/Boolean",
+                "http://schema.org/Integer",
+                "http://schema.org/Float",
+                "https://metadata.datadrivendiscovery.org/types/FloatVector",
+                "http://schema.org/DateTime"
+            ]
+        )
+        pipeline_description.add_step(step_3)
+
+        # Step 4: extract_columns_by_semantic_types(targets)
+        step_4 = PrimitiveStep(primitive=index.get_primitive('d3m.primitives.data_transformation.extract_columns_by_semantic_types.Common'))
+        step_4.add_argument(name='inputs', argument_type=ArgumentType.CONTAINER, data='steps.3.produce')
+        step_4.add_output('produce')
+        step_4.add_hyperparameter(
+            name='semantic_types',
+            argument_type=ArgumentType.VALUE,
+            data=[
+                "https://metadata.datadrivendiscovery.org/types/Target",
+                "https://metadata.datadrivendiscovery.org/types/TrueTarget",
+                "https://metadata.datadrivendiscovery.org/types/SuggestedTarget"
+            ]
+        )
+        pipeline_description.add_step(step_4)
+
+        # Step 5: extract_columns_by_semantic_types(attributes)
+        step_5 = PrimitiveStep(primitive=index.get_primitive('d3m.primitives.data_transformation.extract_columns_by_semantic_types.Common'))
+        step_5.add_argument(name='inputs', argument_type=ArgumentType.CONTAINER, data='steps.3.produce')
+        step_5.add_output('produce')
+        step_5.add_hyperparameter(
+            name='semantic_types',
+            argument_type=ArgumentType.VALUE,
+            data=['https://metadata.datadrivendiscovery.org/types/Attribute'],
+        )
+        pipeline_description.add_step(step_5)
+
+        # Step 6: imputer
+        # I think we only impute attributes but need to check this
+        step_6 = PrimitiveStep(primitive=index.get_primitive('d3m.primitives.data_cleaning.imputer.SKlearn'))
+        step_6.add_argument(name='inputs', argument_type=ArgumentType.CONTAINER, data='steps.5.produce')
+        step_6.add_output('produce')
+        step_6.add_hyperparameter(
+            name='use_semantic_types',
+            argument_type=ArgumentType.VALUE,
+            data=True
+        )
+        step_6.add_hyperparameter(
+            name='return_result',
+            argument_type=ArgumentType.VALUE,
+            data='replace'
+        )
+        step_6.add_hyperparameter(
+            name='strategy',
+            argument_type=ArgumentType.VALUE,
+            data='median'
+        )
+        step_6.add_hyperparameter(
+            name='error_on_no_input',
+            argument_type=ArgumentType.VALUE,
+            data=False
+        )
+        pipeline_description.add_step(step_6)
+
+        # Step 7: grouping field compose
+        step_7 = PrimitiveStep(primitive=index.get_primitive('d3m.primitives.data_transformation.grouping_field_compose.Common'))
+        step_7.add_argument(name='inputs', argument_type=ArgumentType.CONTAINER, data='steps.6.produce')
+        step_7.add_output('produce')
+        pipeline_description.add_step(step_7)
+
+        # Step 8: autoNHITS
+        step_8 = PrimitiveStep(primitive=index.get_primitive('d3m.primitives.time_series_forecasting.nhits.AutonBox'))
+        step_8.add_argument(name='inputs', argument_type=ArgumentType.CONTAINER, data='steps.7.produce')
+        step_8.add_argument(name='outputs', argument_type=ArgumentType.CONTAINER, data='steps.4.produce')
+        #add hyperparams from argument
+        for h in hyperparams:
+            (name, data) = h
+            step_8.add_hyperparameter(
+                name = name,
+                argument_type = ArgumentType.VALUE,
+                data = data
+            )
+        step_8.add_output('produce')
+        pipeline_description.add_step(step_8)
+
+        # Step 9: construct_predictions
+        # This is a primitive which assures that the output of a standard pipeline has predictions
+        # in the correct structure (e.g., there is also a d3mIndex column with index for every row).
+        step_9 = PrimitiveStep(primitive=index.get_primitive('d3m.primitives.data_transformation.construct_predictions.Common'))
+        step_9.add_argument(name='inputs', argument_type=ArgumentType.CONTAINER, data='steps.8.produce')
+        # This is a primitive which uses a non-standard second argument, named "reference".
+        step_9.add_argument(name='reference', argument_type=ArgumentType.CONTAINER, data='steps.1.produce')
+        step_9.add_output('produce')
+        pipeline_description.add_step(step_9)
+
+        # Final output
+        pipeline_description.add_output(name='output predictions', data_reference='steps.9.produce')
+
+        # print json for reference
+        #print(pipeline_description.to_json())
+
+        return pipeline_description
+    
+        '''
+        # Creating pipeline
+        pipeline_description = Pipeline()
+        pipeline_description.add_input(name='inputs')
+
         # Step 0: dataset_to_dataframe
         step_0 = PrimitiveStep(primitive=index.get_primitive('d3m.primitives.data_transformation.dataset_to_dataframe.Common'))
         step_0.add_argument(name='inputs', argument_type=ArgumentType.CONTAINER, data='inputs.0')
@@ -118,6 +257,7 @@ class AutoNHITSTestCase(unittest.TestCase):
         #print(pipeline_description.to_json())
 
         return pipeline_description
+        '''
 
     def run_pipeline(self, pipeline_description : Pipeline, dataset_location : str):
         problem_path = os.path.join(dataset_location, "TRAIN", "problem_TRAIN", "problemDoc.json")
@@ -233,12 +373,9 @@ class AutoNHITSTestCase(unittest.TestCase):
         idx = pd.Index(np.repeat(uids, h), name="unique_id")
         fcsts_df  = pd.DataFrame({"ds": dates}, index=idx)
 
-        
-
         col_idx = 0
         fcsts = np.full((h * len(uids), 1), fill_value=np.nan)
         
-
         # Append predictions in memory placeholder
         output_length = len(model.loss.output_names)
         fcsts[:, col_idx : col_idx + output_length] = model_fcsts
