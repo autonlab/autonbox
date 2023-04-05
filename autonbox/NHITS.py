@@ -14,7 +14,6 @@ from ray import tune
 from neuralforecast.auto import AutoNHITS
 from neuralforecast.losses.pytorch import MAE
 from ray.tune.search.hyperopt import HyperOptSearch
-#from neuralforecast import NeuralForecast
 from neuralforecast.tsdataset import TimeSeriesDataset
 
 import autonbox
@@ -28,9 +27,7 @@ For an intro to NeuralForecast, see https://nixtla.github.io/neuralforecast/exam
 TODO: Add more information here
 """
 
-#not sure if necessary
-#TODO: uncomment if this not being here causes errors
-#__all__ = ('AutoNHITSPrimitive',)
+__all__ = ('AutoNHITSPrimitive',)
 
 Inputs = container.DataFrame
 Outputs = container.DataFrame
