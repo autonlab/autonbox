@@ -3,6 +3,7 @@ import os
 
 import numpy as np
 import pandas as pd
+from sklearn.metrics import mean_squared_error
 from ray import tune
 from ray.tune.search.hyperopt import HyperOptSearch
 #from neuralforecast import NeuralForecast
@@ -48,11 +49,11 @@ class AutoNHITSTestCase(unittest.TestCase):
         step_3 = PrimitiveStep(primitive=index.get_primitive('d3m.primitives.data_transformation.column_parser.Common'))
         step_3.add_argument(name='inputs', argument_type=ArgumentType.CONTAINER, data='steps.2.produce')
         step_3.add_output('produce')
-        #not adding this hyperparameter messes it up
-        #I have NO IDEA why
-        #looking at the documentation for this primitive,
-        #  using defaults should be better
-        #  if if you use defaults it messes up the values in a lot of the columns
+        # not adding this hyperparameter messes it up
+        # We have NO IDEA why (Merritt and Piggy)
+        # Looking at the documentation for this primitive,
+        # using defaults should be better.
+        # if you use defaults it messes up the values in a lot of the columns
         step_3.add_hyperparameter(
             name='parse_semantic_types',
             argument_type=ArgumentType.VALUE,
@@ -60,8 +61,8 @@ class AutoNHITSTestCase(unittest.TestCase):
                 "http://schema.org/Boolean",
                 "http://schema.org/Integer",
                 "http://schema.org/Float",
-                "https://metadata.datadrivendiscovery.org/types/FloatVector",
-                "http://schema.org/DateTime"
+                "https://metadata.datadrivendiscovery.org/types/FloatVector"
+                # "http://schema.org/DateTime" (adding this messes up the "year" column for some reason)
             ]
         )
         pipeline_description.add_step(step_3)
@@ -427,7 +428,8 @@ class AutoNHITSTestCase(unittest.TestCase):
         #assert((direct_predictions['y'] == pipeline_predictions).all())
 
     def test_sunspots(self):
-
+        print("testing sunspots")
+        
         dataset_location = "/home/mkowales/datasets/sunspots/d3m"
 
         train_data_path = os.path.join(dataset_location, "TRAIN", "dataset_TRAIN", "tables", "learningData.csv")
@@ -450,11 +452,11 @@ class AutoNHITSTestCase(unittest.TestCase):
 
         h = int(test.shape[0])
 
-        #----------
-        #run AutoNHITS directly
+        # ----------
+        # run AutoNHITS directly
         direct_predictions = self.run_direct(train, test, h)
 
-        #run simple pipeline with AutoNHITS primitive
+        # run simple pipeline with AutoNHITS primitive
         pipeline_description = self.construct_pipeline(hyperparams=[])
         pipeline_predictions = self.run_pipeline(pipeline_description, dataset_location)
         pipeline_predictions = pipeline_predictions[target_name]
@@ -463,9 +465,17 @@ class AutoNHITSTestCase(unittest.TestCase):
         print(direct_predictions)
         print("from pipeline:")
         print(pipeline_predictions)
+        # predictions will not necessarily be identical but should be similar\
+        # print("DEBUG: type(direct_predictions): %r", type(direct_predictions))
+        # print("DEBUG: type(pipeline_predictions): %r", type(pipeline_predictions))
 
-        #predictions will not necessarily be identical but should be similar
-        #assert((direct_predictions == pipeline_predictions).all())
-    
+        rmse = self.ref_metric(direct_predictions, pipeline_predictions)
+        epsilon = 30
+        assert rmse < epsilon, "rmse: %f not < epsilon: %f" % (rmse, epsilon)
+
+    def ref_metric(self, d1, d2):
+        return np.sqrt(mean_squared_error(d1, d2))
+
+
 if __name__ == '__main__':
     unittest.main()
