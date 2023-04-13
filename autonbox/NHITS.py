@@ -1,5 +1,6 @@
 import typing
 import copy
+import logging
 
 from d3m import container
 from d3m.primitive_interfaces import base
@@ -17,6 +18,8 @@ from ray.tune.search.hyperopt import HyperOptSearch
 from neuralforecast.tsdataset import TimeSeriesDataset
 
 import autonbox
+
+logging.basicConfig(level=logging.DEBUG)
 
 """
 A wrapper primitive for AutoNHITS from NeuralForecast (https://nixtla.github.io/neuralforecast/models.html#autonhits)
@@ -73,7 +76,7 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
     })
 
     def __init__(self, *, hyperparams: Hyperparams) -> None:
-        #print("calling __init__")
+        logging.debug("calling %s.__init__", self.__class__.__name__)
 
         super().__init__(hyperparams=hyperparams)
 
@@ -91,7 +94,7 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
         self._model = None
 
     def get_params(self) -> Params:
-        #print("calling get_params")
+        logging.debug("calling %s.get_params", self.__class__.__name__)
         return Params(
             has_training_data = self._has_training_data,
             new_training_data = self._new_training_data,
@@ -106,7 +109,7 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
         )
 
     def set_params(self, *, params: Params) -> None:
-        #print("calling set_params")
+        logging.debug("calling %s.set_params", self.__class__.__name__)
         self._has_training_data = params['has_training_data']
         self._new_training_data = params['new_training_data']
 
@@ -123,7 +126,7 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
     #private method
     def _format_data(self, attributes, target=None):
         #transform data from d3m input format to neuralforcast ingest format
-        #print("formatting data for neuralforecast")
+        logging.debug("formatting data for neuralforecast")
 
         #extract time column as series
         time_col_indices = attributes.metadata.list_columns_with_semantic_types(
@@ -131,15 +134,13 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
                 "https://metadata.datadrivendiscovery.org/types/Time",
             )
         )
-        #print("timestamp cols: " + str(time_col_indices))
+        logging.debug("timestamp cols: " + str(time_col_indices))
         #TODO: make sure there's only 1 timestamp col
         #TODO: make sure it's valid datetime
         time_col = attributes.iloc[:,time_col_indices[0]]
-        #print("time col before conversion to datetime:")
-        #print(time_col)
+        logging.debug("time col before conversion to datetime: \n%r", time_col)
         time_col = pd.to_datetime(time_col)
-        #print("time col after conversion to datetime:")
-        #print(time_col)
+        logging.debug("time col after conversion to datetime:: \n%r", time_col)
 
         #extract grouping column as series
         group_col_indices = attributes.metadata.list_columns_with_semantic_types(
@@ -148,7 +149,7 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
                 "https://metadata.datadrivendiscovery.org/types/SuggestedGroupingKey"
             )
         )
-        #print("grouping cols: " + str(group_col_indices))
+        logging.debug("grouping cols: " + str(group_col_indices))
         #TODO: make sure theres <=1 grouping col
         #TODO: make sure grouping col is valid
         if len(group_col_indices) > 0:
@@ -167,11 +168,11 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
                 "https://metadata.datadrivendiscovery.org/types/Attribute",
             )
         )
-        #print("attribute cols: " + str(attribute_col_indices))
+        logging.debug("attribute cols: " + str(attribute_col_indices))
         exog_col_inidices = list(set(attribute_col_indices) - set(group_col_indices + time_col_indices))
-        #print("exogenous cols: " + str(exog_col_inidices))
+        logging.debug("exogenous cols: " + str(exog_col_inidices))
         exogenous_colnames = [list(attributes.columns)[i] for i in exog_col_inidices]
-        #print("exogenous colnames: " + str(exogenous_colnames))
+        logging.debug("exogenous colnames: " + str(exogenous_colnames))
         self._exog_names = exogenous_colnames
 
         #construct dataframe formatted to be ingested by neuralforecast
@@ -190,11 +191,9 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
 
 
     def set_training_data(self, *, inputs: Inputs, outputs: Outputs) -> None:
-        #print("calling AutoNHITS set_training_data")
-        #print("Inputs:")
-        #print(inputs)
-        #print("Outputs:")
-        #print(outputs)
+        logging.debug("calling AutoNHITS set_training_data")
+        logging.debug("Inputs: \n%r", inputs)
+        logging.debug("Outputs: \n%r", outputs)
         
         #inputs is a dataframe that will be used as exogenous data, excepting time columns
         #outputs is a dataframe containing one column, the time series that we want to predict future values of
@@ -219,17 +218,16 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
     def fit(self, *, timeout: float = None, iterations: int = None) -> base.CallResult[None]:
         #in order to fit NHITS, need to know forecasting horizon
         #so fit in the produce method and do nothing here
-        #print("calling fit, do nothing")
+        logging.info("calling %s.fit, do nothing", self.__class__.__name__)
         return base.CallResult(None)
 
     #private method
     def _fit_nf(self, train_ts, h):
 
-        #print("Fitting NeuralForecast AutoNHITS")
-        #print("train:")
-        #print(self._nf_train_data)
-        #print("h:" + str(h))
-        #print("future exog: " + str(self._exog_names))
+        logging.info("Fitting NeuralForecast AutoNHITS")
+        logging.debug("train:\n%r", self._nf_train_data)
+        logging.debug("h:" + str(h))
+        logging.debug("future exog: " + str(self._exog_names))
 
         nhits_config = {
             "input_size": 3*h,
@@ -266,9 +264,8 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
 
     
     def produce(self, *, inputs: Inputs, timeout: float = None, iterations: int = None) -> base.CallResult[Outputs]:
-        #print("calling AutoNHITS produce")
-        #print("Inputs:")
-        #print(inputs)
+        logging.info("calling AutoNHITS produce")
+        logging.debug("Inputs:\n%r", inputs)
         #inputs is non-target columns that can optionally be used as future exogenous data.
         #also includes time and grouping columns
 
@@ -282,7 +279,7 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
             #and they dont really make sense for time series forecasting
             #dataframe that is the same length as expected output
             #contains one column with the target's name which is all 0's
-            #print("returning dummy data for in-sample predictions")
+            logging.info("returning dummy data for in-sample predictions")
             nrows = inputs.shape[0]
             predictions = pd.DataFrame({self._target_name:[0]*nrows})
 
@@ -294,7 +291,7 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
             if not self._fitted or self._new_training_data:
                 #predict for a number of periods corresponding to number of rows in inputs
                 h = int(inputs.shape[0]/self._ngroups)
-                #print("h:" + str(h))
+                logging.debug("h:" + str(h))
 
                 self._fit_nf(train_ts, h)
 
@@ -303,8 +300,7 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
 
             #TODO: check that self._model not None
             future = self._format_data(inputs)
-            #print("future:")
-            #print(future)
+            logging.debug("future: \n%r", future)
 
             predict_ts = TimeSeriesDataset.update_dataset(
                 dataset=train_ts, future_df=future
@@ -313,13 +309,11 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
 
             predictions = self._model.predict(dataset=predict_ts)
             predictions = list(predictions.flatten())
-            #print("raw predictions:")
-            #print(predictions)
-            #print(type(predictions))
+            logging.debug("raw predictions: \n%r", predictions)
+            logging.debug(type(predictions))
             predictions = pd.DataFrame({self._target_name : predictions})
 
-            #print("predictions to return:")
-            #print(predictions)
+            logging.debug("predictions to return: \n%r", predictions)
 
         #need to put predictions in right format for d3m
         output = container.DataFrame(predictions, generate_metadata=True)

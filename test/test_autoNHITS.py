@@ -1,12 +1,14 @@
 import unittest
 import os
+import logging
 
 import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_squared_error
+
 from ray import tune
 from ray.tune.search.hyperopt import HyperOptSearch
-#from neuralforecast import NeuralForecast
+
 from neuralforecast.tsdataset import TimeSeriesDataset
 from neuralforecast.auto import AutoNHITS
 from neuralforecast.losses.pytorch import MAE
@@ -16,6 +18,8 @@ from d3m.container import dataset
 from d3m.metadata import problem
 from d3m.metadata.base import ArgumentType, Context
 from d3m.metadata.pipeline import Pipeline, PrimitiveStep
+
+logging.basicConfig(level=logging.DEBUG)
 
 class AutoNHITSTestCase(unittest.TestCase):
 
@@ -261,6 +265,8 @@ class AutoNHITSTestCase(unittest.TestCase):
         '''
 
     def run_pipeline(self, pipeline_description : Pipeline, dataset_location : str):
+        logging.info("Fitting NeuralForecast AutoNHITS (pipeline)")
+        
         problem_path = os.path.join(dataset_location, "TRAIN", "problem_TRAIN", "problemDoc.json")
         train_doc_path = os.path.join(dataset_location, "TRAIN", "dataset_TRAIN", "datasetDoc.json")
         test_doc_path = os.path.join(dataset_location, "TEST", "dataset_TEST", "datasetDoc.json")
@@ -272,8 +278,8 @@ class AutoNHITSTestCase(unittest.TestCase):
         train_dataset = dataset.get_dataset(train_doc_path)
         test_dataset = dataset.get_dataset(test_doc_path)
 
-        print(train_dataset)
-        print(test_dataset)
+        logging.debug("train dataset: \n%r\n\n", train_dataset)
+        logging.debug("test dataset: \n%r\n\n", test_dataset)
 
         # Fitting pipeline on train dataset.
         fitted_pipeline, train_predictions, fit_result = runtime.fit(
@@ -301,11 +307,10 @@ class AutoNHITSTestCase(unittest.TestCase):
         #run AutoNHITS directly
         future_exog = list(set(train.columns) - set(['ds', 'unique_id', 'y']))
         
-        print("Fitting NeuralForecast AutoNHITS (direct)")
-        print("train:")
-        print(train)
-        print("h:" + str(h))
-        print("future exog: " + str(future_exog))
+        logging.info("Fitting NeuralForecast AutoNHITS (direct)")
+        logging.debug("train: \n %r", train)
+        logging.debug("h:" + str(h))
+        logging.debug("future exog: " + str(future_exog))
 
         nhits_config = {
             "input_size": 3*h,
@@ -344,16 +349,15 @@ class AutoNHITSTestCase(unittest.TestCase):
         y = test['y']
         del test['y']
 
-        print("future:")
-        print(test)
+        logging.debug("future: \n %r", test)
+
         dataset = TimeSeriesDataset.update_dataset(
             dataset=train, future_df=test
         )
 
         model.set_test_size(h)  # To predict h steps ahead
         model_fcsts = model.predict(dataset=dataset)
-        #print("model_fcsts:")
-        #print(model_fcsts)
+
         return(pd.DataFrame({"y": list(model_fcsts.flatten())}))
         #----------------------------------
         '''
@@ -389,7 +393,7 @@ class AutoNHITSTestCase(unittest.TestCase):
         #----------------------------------
 
     def test_nfsample(self):
-        print("testing nf sample dataset")
+        logging.info("testing nf sample dataset")
         dataset_location = "/home/mkowales/datasets/nfsample/d3m"
 
         train_data_path = os.path.join(dataset_location, "TRAIN", "dataset_TRAIN", "tables", "learningData.csv")
@@ -417,19 +421,21 @@ class AutoNHITSTestCase(unittest.TestCase):
         pipeline_predictions = self.run_pipeline(pipeline_description, dataset_location)
         pipeline_predictions = pipeline_predictions[target_name]
 
-        print("direct:")
-        print(direct_predictions)
-        print(type(direct_predictions))
-        print("from pipeline:")
-        print(pipeline_predictions)
-        print(type(pipeline_predictions))
+        logging.debug("direct predictions: \n %r", direct_predictions)
+        logging.debug("predictions from pipeline: \n %r", pipeline_predictions)
 
         #predictions will not necessarily be identical but should be similar
         #assert((direct_predictions['y'] == pipeline_predictions).all())
 
     def test_sunspots(self):
-        print("testing sunspots")
+        logging.info("testing sunspots")
         
+        # run simple pipeline with AutoNHITS primitive
+        pipeline_description = self.construct_pipeline(hyperparams=[])
+        pipeline_predictions = self.run_pipeline(pipeline_description, dataset_location)
+        pipeline_predictions = pipeline_predictions[target_name]
+
+        # run AutoNHITS directly
         dataset_location = "/home/mkowales/datasets/sunspots/d3m"
 
         train_data_path = os.path.join(dataset_location, "TRAIN", "dataset_TRAIN", "tables", "learningData.csv")
@@ -452,25 +458,17 @@ class AutoNHITSTestCase(unittest.TestCase):
 
         h = int(test.shape[0])
 
-        # ----------
-        # run AutoNHITS directly
+
         direct_predictions = self.run_direct(train, test, h)
 
-        # run simple pipeline with AutoNHITS primitive
-        pipeline_description = self.construct_pipeline(hyperparams=[])
-        pipeline_predictions = self.run_pipeline(pipeline_description, dataset_location)
-        pipeline_predictions = pipeline_predictions[target_name]
+        # -----------------------
 
-        print("direct:")
-        print(direct_predictions)
-        print("from pipeline:")
-        print(pipeline_predictions)
-        # predictions will not necessarily be identical but should be similar\
-        # print("DEBUG: type(direct_predictions): %r", type(direct_predictions))
-        # print("DEBUG: type(pipeline_predictions): %r", type(pipeline_predictions))
-
+        logging.debug("direct predictions: \n %r", direct_predictions)
+        logging.debug("predictions from pipeline: \n %r", pipeline_predictions)
+        
+        # predictions will not necessarily be identical but should be similar
         rmse = self.ref_metric(direct_predictions, pipeline_predictions)
-        epsilon = 30
+        epsilon = 30 # TODO: Tighten this up by playing with AutoNHITS settings.
         assert rmse < epsilon, "rmse: %f not < epsilon: %f" % (rmse, epsilon)
 
     def ref_metric(self, d1, d2):
