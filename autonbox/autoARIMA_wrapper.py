@@ -13,6 +13,8 @@ from statsforecast.arima import AutoARIMA
 from autonbox import __version__
 
 __all__ = ('AutoARIMAWrapperPrimitive',)
+#TODO: handle grouping
+#TODO: use proper statsforecast formatting?
 
 Inputs = container.DataFrame
 Outputs = container.DataFrame
@@ -417,13 +419,11 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         self._autoARIMA = params['autoARIMA']
 
     def set_training_data(self, *, inputs: Inputs, outputs: Outputs) -> None:
-        '''
-        print("calling set_training_data")
-        print("Inputs:")
-        print(inputs)
-        print("Outputs:")
-        print(outputs)
-        '''
+        #print("calling AutoARIMA set_training_data")
+        #print("Inputs:")
+        #print(inputs)
+        #print("Outputs:")
+        #print(outputs)
         
         '''
         inputs is a dataframe that will be used as exogenous data, excepting time columns
@@ -573,7 +573,7 @@ class AutoARIMAWrapperPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, 
         return base.CallResult(None)
 
     def produce(self, *, inputs: Inputs, timeout: float = None, iterations: int = None) -> base.CallResult[Outputs]:
-        #print("calling produce")
+        #print("calling AutoARIMA produce")
         #print("Inputs:")
         #print(inputs)
 
