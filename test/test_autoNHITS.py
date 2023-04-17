@@ -19,7 +19,7 @@ from d3m.metadata import problem
 from d3m.metadata.base import ArgumentType, Context
 from d3m.metadata.pipeline import Pipeline, PrimitiveStep
 
-logging.basicConfig(level=logging.DEBUG)
+#logging.basicConfig(level=logging.DEBUG)
 
 class AutoNHITSTestCase(unittest.TestCase):
 
@@ -359,38 +359,7 @@ class AutoNHITSTestCase(unittest.TestCase):
         model_fcsts = model.predict(dataset=dataset)
 
         return(pd.DataFrame({"y": list(model_fcsts.flatten())}))
-        #----------------------------------
-        '''
-        if issubclass(last_dates.dtype.type, np.integer):
-            last_date_f = lambda x: np.arange(
-            	x + 1, x + 1 + h, dtype=last_dates.dtype
-        	)
-        else:
-            last_date_f = lambda x: pd.date_range(
-                x + self.freq, periods=h, freq=self.freq
-            )
 
-        if len(np.unique(last_dates)) == 1:
-            dates = np.tile(last_date_f(last_dates[0]), len(train))
-        else:
-            dates = np.hstack([last_date_f(last_date) for last_date in last_dates])
-        
-        idx = pd.Index(np.repeat(uids, h), name="unique_id")
-        fcsts_df  = pd.DataFrame({"ds": dates}, index=idx)
-
-        col_idx = 0
-        fcsts = np.full((h * len(uids), 1), fill_value=np.nan)
-        
-        # Append predictions in memory placeholder
-        output_length = len(model.loss.output_names)
-        fcsts[:, col_idx : col_idx + output_length] = model_fcsts
-        col_idx += output_length
-
-        # Declare predictions pd.DataFrame
-        fcsts = pd.DataFrame.from_records(fcsts, columns=cols, index=fcsts_df.index)
-        fcsts_df = pd.concat([fcsts_df, fcsts], axis=1)
-        '''
-        #----------------------------------
 
     def test_nfsample(self):
         logging.info("testing nf sample dataset")

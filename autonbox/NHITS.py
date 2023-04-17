@@ -19,7 +19,7 @@ from neuralforecast.tsdataset import TimeSeriesDataset
 
 import autonbox
 
-logging.basicConfig(level=logging.DEBUG)
+#logging.basicConfig(level=logging.DEBUG)
 
 """
 A wrapper primitive for AutoNHITS from NeuralForecast (https://nixtla.github.io/neuralforecast/models.html#autonhits)
@@ -230,7 +230,7 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
         logging.debug("future exog: " + str(self._exog_names))
 
         nhits_config = {
-            "input_size": 3*h,
+            "input_size": tune.choice([3*h, 5*h]), #set to 3*h for debug
             "n_pool_kernel_size": tune.choice(
                 [3 * [1], 3 * [2], 3 * [4], [8, 4, 1], [16, 8, 1]]
             ),
@@ -246,7 +246,7 @@ class AutoNHITSPrimitive(SupervisedLearnerPrimitiveBase[Inputs, Outputs, Params,
             ),
             "learning_rate": tune.loguniform(1e-4, 1e-1),
             "scaler_type" : 'robust',
-            "max_steps": 100,  #TODO: change to 1000 after testing
+            "max_steps": 500,  #TODO: change to 1000 after testing
             "batch_size": tune.choice([32, 64, 128, 256]),
             "windows_batch_size": tune.choice([128, 256, 512, 1024]),                                                                       # Initial Learning rate
             "random_seed": 1,                               
